@@ -138,9 +138,13 @@ const IndependenceEligibility = (function () {
     const workedDayAfter   = hasShiftOverlapping(shifts, DAY_AFTER);
     const qualifyingDay    = presentDayBefore || presentDayAfter;
 
-    // Can't double-pay: if the employee was on sick leave on the holiday day
-    // itself (22.4), their sick pay covers it — no holiday pay on top.
-    const sickOnHoliday = absences.some((ab) => ab.type === "sick" && sameCalendarDay(ab.date, HOLIDAY_DAY));
+    // Can't double-pay: if the employee was on sick leave OR military reserve
+    // on the holiday day itself (22.4), that pay component covers the day —
+    // no holiday pay on top. Vacation does NOT disqualify (in Israel a vacation
+    // day that falls on a holiday is credited back to the balance, so the
+    // employee still receives the holiday pay).
+    const sickOnHoliday     = absences.some((ab) => ab.type === "sick"     && sameCalendarDay(ab.date, HOLIDAY_DAY));
+    const militaryOnHoliday = absences.some((ab) => ab.type === "military" && sameCalendarDay(ab.date, HOLIDAY_DAY));
 
     const cap = emp.daysPerWeek === 5 ? 8.4 : emp.daysPerWeek === 6 ? 8 : 0;
     const avgCapped = avgHoursPerDay > 0 && cap > 0 ? round2(Math.min(avgHoursPerDay, cap)) : 0;
@@ -151,9 +155,11 @@ const IndependenceEligibility = (function () {
       mode = "worked";
       extraHolidayHours = round2(hoursWorkedInWindow);
     } else if (sickOnHoliday) {
-      // Sick leave on 22.4 → sick pay applies, no holiday pay (no double-payment).
       mode = "ineligible";
       reason = "במחלה ביום החג (22.4) — מקבל דמי מחלה, לא תשלום חג";
+    } else if (militaryOnHoliday) {
+      mode = "ineligible";
+      reason = "במילואים ביום החג (22.4) — מקבל תשלום מילואים, לא תשלום חג";
     } else if (qualifyingDay && tenureOk) {
       mode = "holiday_pay";
       holidayPayHours = avgCapped;
