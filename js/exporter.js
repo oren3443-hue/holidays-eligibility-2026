@@ -10,6 +10,8 @@ const Exporter = (function () {
     { key: "empId", header: "מספר עובד", type: "number", width: 11 },
     { key: "firstName", header: "שם פרטי", type: "string", width: 14 },
     { key: "lastName", header: "שם משפחה", type: "string", width: 14 },
+    { key: "deptName", header: "מחלקה", type: "string", width: 16 },
+    { key: "deptNumber", header: "מס' מחלקה (מיכפל)", type: "number", width: 14 },
     { key: "daysPerWeek", header: "מתכונת (5/6)", type: "number", width: 11 },
     { key: "startDate", header: "תאריך תחילת עבודה", type: "date", width: 16 },
     { key: "tenureOk", header: "ותק תקין?", fmt: "yesno", width: 10 },
@@ -30,6 +32,21 @@ const Exporter = (function () {
     { key: "hours_6_4", header: "שעות 6.4", type: "number", numFmt: "0.00", width: 9 },
     { key: "hours_7_4", header: "שעות 7.4", type: "number", numFmt: "0.00", width: 9 },
     { key: "totalHolidayHours", header: 'סה"כ שעות חופש', type: "number", numFmt: "0.00", width: 14 },
+    { key: "holidayDaysCount", header: "ימי חג", type: "number", width: 9 },
+    { key: "holidayPayHours", header: "שעות רכיב חג", type: "number", numFmt: "0.00", width: 13 },
+  ];
+
+  // Import file for the payroll software (קובץ קליטה).
+  // CRITICAL: zero values must be left empty (null), not 0 — that's how the software
+  // knows to skip importing that field for that employee.
+  const IMPORT_COLUMNS = [
+    { key: "empId", header: "מספר עובד", type: "number", width: 11, blankIfZero: false },
+    { key: "fullName", header: "שם העובד", type: "string", width: 22, blankIfZero: false },
+    { key: "deptNumber", header: "מחלקה (מיכפל)", type: "number", width: 14, blankIfZero: false },
+    { key: "daysToUse", header: "ימי חופש לניצול", type: "number", width: 14, blankIfZero: true },
+    { key: "totalHolidayHours", header: "שעות רכיב חופשה", type: "number", numFmt: "0.00", width: 16, blankIfZero: true },
+    { key: "holidayDaysCount", header: "ימי חג", type: "number", width: 9, blankIfZero: true },
+    { key: "holidayPayHours", header: "שעות חג לתשלום", type: "number", numFmt: "0.00", width: 16, blankIfZero: true },
   ];
 
   // Style palette
@@ -92,7 +109,7 @@ const Exporter = (function () {
 
   function buildCell(value, fmt, type) {
     if (value === null || value === undefined || value === "") {
-      return { v: "", t: "s" };
+      return null; // truly empty cell — caller skips writing it
     }
     if (fmt === "yesno") {
       return { v: value ? "כן" : "לא", t: "s" };
@@ -103,7 +120,7 @@ const Exporter = (function () {
     }
     if (type === "number") {
       const n = typeof value === "number" ? value : parseFloat(value);
-      if (isNaN(n)) return { v: "", t: "s" };
+      if (isNaN(n)) return null;
       return { v: n, t: "n" };
     }
     return { v: String(value), t: "s" };
@@ -120,45 +137,71 @@ const Exporter = (function () {
     return s;
   }
 
-  function exportXlsx(rows, filename) {
+  /** Build a styled sheet from rows + a column spec. styled=true gives the full detail look. */
+  function buildSheet(rows, columns, opts) {
+    const styled = opts && opts.styled !== false; // default true
     const ws = {};
-    const lastColIdx = COLUMNS.length - 1;
-    const lastRowIdx = rows.length; // header + rows
+    const lastColIdx = columns.length - 1;
+    const lastRowIdx = rows.length;
 
     // Header row
-    COLUMNS.forEach((col, ci) => {
+    columns.forEach((col, ci) => {
       const addr = colLetter(ci) + "1";
-      ws[addr] = { v: col.header, t: "s", s: headerStyle() };
+      ws[addr] = { v: col.header, t: "s", s: styled ? headerStyle() : undefined };
     });
 
-    // Data rows
+    // Data rows. NOTE: when buildCell returns null we DO NOT write the cell at all —
+    // truly empty cells are essential for the payroll software's import logic
+    // (a blank string "" would still count as a value).
     rows.forEach((r, ri) => {
       const alt = ri % 2 === 1;
-      COLUMNS.forEach((col, ci) => {
+      columns.forEach((col, ci) => {
         const addr = colLetter(ci) + (ri + 2);
-        const cell = buildCell(r[col.key], col.fmt, col.type);
-        cell.s = bodyStyle({ alt, key: col.key, value: cell.v });
+        let value = r[col.key];
+
+        // Per-column "blankIfZero" rule (used by the import file)
+        if (col.blankIfZero && (value === 0 || value === "0")) value = null;
+
+        const cell = buildCell(value, col.fmt, col.type);
+        if (cell === null) return; // skip — leaves the cell truly empty
+        if (col.numFmt && cell.t === "n") cell.z = col.numFmt;
+        if (styled) cell.s = bodyStyle({ alt, key: col.key, value: cell.v });
         ws[addr] = cell;
       });
     });
 
-    // Sheet metadata
     ws["!ref"] = `A1:${colLetter(lastColIdx)}${lastRowIdx + 1}`;
-    ws["!cols"] = COLUMNS.map((c) => ({ wch: c.width || 12 }));
-    ws["!rows"] = [{ hpt: 28 }]; // taller header row
+    ws["!cols"] = columns.map((c) => ({ wch: c.width || 12 }));
+    if (styled) ws["!rows"] = [{ hpt: 28 }];
     ws["!autofilter"] = { ref: ws["!ref"] };
     ws["!freeze"] = { ySplit: 1 };
     ws["!views"] = [{ rightToLeft: true, state: "frozen", ySplit: 1 }];
+    return ws;
+  }
 
+  function buildWorkbook(ws, sheetName) {
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "זכאות פסח");
-
-    // Workbook-level: open as RTL by default
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
     if (!wb.Workbook) wb.Workbook = {};
     if (!wb.Workbook.Views) wb.Workbook.Views = [{}];
     wb.Workbook.Views[0].RTL = true;
+    return wb;
+  }
 
+  function exportXlsx(rows, filename) {
+    const ws = buildSheet(rows, COLUMNS, { styled: true });
+    const wb = buildWorkbook(ws, "זכאות פסח");
     const fname = filename || `זכאות-פסח-${todayStr()}.xlsx`;
+    XLSX.writeFile(wb, fname, { cellStyles: true });
+  }
+
+  /** Export the import file for the payroll software (קובץ קליטה).
+   *  Cells with value 0 are left BLANK on columns flagged blankIfZero —
+   *  the payroll software treats blank as "no import" for that field. */
+  function exportImportXlsx(rows, filename) {
+    const ws = buildSheet(rows, IMPORT_COLUMNS, { styled: true });
+    const wb = buildWorkbook(ws, "קליטה");
+    const fname = filename || `קליטה-פסח-${todayStr()}.xlsx`;
     XLSX.writeFile(wb, fname, { cellStyles: true });
   }
 
@@ -170,5 +213,5 @@ const Exporter = (function () {
     return `${yy}-${mm}-${dd}`;
   }
 
-  return { exportXlsx, COLUMNS };
+  return { exportXlsx, exportImportXlsx, COLUMNS, IMPORT_COLUMNS };
 })();

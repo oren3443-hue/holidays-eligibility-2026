@@ -39,6 +39,7 @@
     const allLoaded = FILE_KEYS.every((k) => !!state.files[k]);
     $("#calculate-btn").disabled = !allLoaded;
     $("#download-btn").disabled = !state.rows;
+    $("#download-import-btn").disabled = !state.rows;
   }
 
   function readFileAsArrayBuffer(file) {
@@ -320,12 +321,24 @@
     Exporter.exportXlsx(rows);
   }
 
+  function downloadImportXlsx() {
+    if (!state.rows) return;
+    // Import file: respect filters, then drop rows where ALL the four importable
+    // payroll fields are zero/empty — those employees have nothing to import.
+    const filtered = applyFilters(state.rows).filter((r) => {
+      return (r.daysToUse > 0) || (r.totalHolidayHours > 0) ||
+             (r.holidayDaysCount > 0) || (r.holidayPayHours > 0);
+    });
+    Exporter.exportImportXlsx(filtered);
+  }
+
   // Init
   document.addEventListener("DOMContentLoaded", () => {
     FILE_KEYS.forEach(setupFileInput);
     setupBulkUpload();
     $("#calculate-btn").addEventListener("click", calculate);
     $("#download-btn").addEventListener("click", downloadXlsx);
+    $("#download-import-btn").addEventListener("click", downloadImportXlsx);
     setupFilters();
     updateButtons();
   });

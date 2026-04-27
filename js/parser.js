@@ -67,7 +67,7 @@ const Parser = (function () {
     return null;
   }
 
-  /** Parse employee details file. Returns Map<empId, {empId, startDate, endDate, daysPerWeek}>. */
+  /** Parse employee details file. Returns Map<empId, {empId, startDate, endDate, daysPerWeek, deptNumber}>. */
   function parseEmployees(rows) {
     const out = new Map();
     // Header row 1, data starts row 2 (index 1)
@@ -81,6 +81,7 @@ const Parser = (function () {
         startDate: toDate(r[64]),
         endDate: toDate(r[65]),
         daysPerWeek: r[75] === 5 ? 5 : r[75] === 6 ? 6 : (toNumber(r[75]) === 5 ? 5 : toNumber(r[75]) === 6 ? 6 : null),
+        deptNumber: r[71] !== null && r[71] !== undefined && r[71] !== "" ? r[71] : null, // col 72: מספר מחלקה
       });
     }
     return out;
@@ -99,6 +100,7 @@ const Parser = (function () {
         empId,
         firstName: r[4] || "",
         lastName: r[5] || "",
+        deptName: r[6] || "", // col 7: מחלקה (name)
         work: toNumber(r[14]),
         vacation: toNumber(r[23]),
         sick: toNumber(r[24]),

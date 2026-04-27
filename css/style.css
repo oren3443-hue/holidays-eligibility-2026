@@ -153,6 +153,9 @@ main {
 .actions button:disabled { background: #d1d5db; cursor: not-allowed; }
 #download-btn { background: #10b981; }
 #download-btn:hover:not(:disabled) { background: #059669; }
+#download-import-btn { background: #0ea5e9; }
+#download-import-btn:hover:not(:disabled) { background: #0284c7; }
+.btn-secondary { font-size: 15px; }
 
 .message {
   flex: 1;

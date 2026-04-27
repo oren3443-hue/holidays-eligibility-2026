@@ -80,6 +80,8 @@ const Eligibility = (function () {
     const aprilRec = sources.april ? sources.april.get(empId) : null;
     const firstName = (aprilRec && aprilRec.firstName) || (m31 && m31.firstName) || (a9 && a9.firstName) || "";
     const lastName  = (aprilRec && aprilRec.lastName)  || (m31 && m31.lastName)  || (a9 && a9.lastName)  || "";
+    const deptName  = (aprilRec && aprilRec.deptName)  || (m31 && m31.deptName)  || (a9 && a9.deptName)  || "";
+    const deptNumber = emp ? emp.deptNumber : null;
 
     const daysPerWeek = emp ? emp.daysPerWeek : null;
     const startDate = emp ? emp.startDate : null;
@@ -127,10 +129,24 @@ const Eligibility = (function () {
     }
     const totalHolidayHours = Object.values(dayHoursByDate).reduce((s, v) => s + (v || 0), 0);
 
+    // ----- Holiday pay (רכיב חג) -----
+    // Each eligible holiday day pays avg hours, capped at 8 (6-day) or 8.4 (5-day).
+    // No erev-chag reduction here — Pesach A and B are full holidays (Yom Tov), not erev chag.
+    const holidayDayCap = daysPerWeek === 5 ? 8.4 : daysPerWeek === 6 ? 8 : 0;
+    const holidayHoursPerDay =
+      avgHoursPerDay > 0 && holidayDayCap > 0
+        ? round2(Math.min(avgHoursPerDay, holidayDayCap))
+        : 0;
+    const eligibleHolidayCount = (eligibleA ? 1 : 0) + (eligibleB ? 1 : 0);
+    const holidayPayHours = round2(holidayHoursPerDay * eligibleHolidayCount);
+
     return {
       empId,
       firstName,
       lastName,
+      fullName: `${firstName} ${lastName}`.trim(),
+      deptName,
+      deptNumber,
       daysPerWeek,
       startDate,
       endDate,
@@ -152,6 +168,8 @@ const Eligibility = (function () {
       hours_6_4: dayHoursByDate["6.4"],
       hours_7_4: dayHoursByDate["7.4"],
       totalHolidayHours: round2(totalHolidayHours),
+      holidayDaysCount: eligibleHolidayCount,
+      holidayPayHours,
     };
   }
 
