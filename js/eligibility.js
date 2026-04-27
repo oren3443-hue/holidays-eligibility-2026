@@ -163,11 +163,29 @@ const Eligibility = (function () {
    * Run full computation across all April-active employees.
    * @param {*} sources - { employees, threeMonths, march31, april9, april }
    * @returns Array of result rows.
+   *
+   * Relevance filter:
+   *   - Employee must appear in the April attendance file.
+   *   - Exclude if they were ONLY on military reserve (no shift, no vacation, no sick).
+   *     Reasoning: military reserve pay is handled separately and the employee
+   *     wasn't actually present in the workplace at all.
+   *   - All-zero rows (no activity at all) ARE kept, per user spec.
    */
+  function isAprilRelevant(rec) {
+    if (!rec) return false;
+    const w = rec.work || 0;
+    const v = rec.vacation || 0;
+    const s = rec.sick || 0;
+    const m = rec.military || 0;
+    if (m > 0 && w === 0 && v === 0 && s === 0) return false;
+    return true;
+  }
+
   function calculateAll(sources) {
-    // Use April file as the relevance filter
-    const activeIds = Array.from(sources.april.keys());
-    // Sort numerically when possible, else lexicographically
+    const activeIds = [];
+    for (const [id, rec] of sources.april.entries()) {
+      if (isAprilRelevant(rec)) activeIds.push(id);
+    }
     activeIds.sort((a, b) => {
       const na = Number(a), nb = Number(b);
       if (!isNaN(na) && !isNaN(nb)) return na - nb;
