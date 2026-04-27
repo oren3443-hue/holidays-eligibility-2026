@@ -1,0 +1,10 @@
+# Real employee data — never commit
+*.xlsx
+*.xls
+~$*
+data/
+.DS_Store
+
+# Local dev tooling
+.claude/
+verify.py

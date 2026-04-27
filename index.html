@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>חישוב זכאות פסח 2026</title>
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+  <header>
+    <h1>חישוב זכאות פסח 2026</h1>
+    <p class="subtitle">פסח א · חול המועד · פסח ב — חישוב אוטומטי לכל עובד</p>
+  </header>
+
+  <main>
+    <section class="info-box">
+      <h2>איך זה עובד?</h2>
+      <ol>
+        <li>העלה את 5 קבצי האקסל (סדר לא חשוב, כל קובץ מסומן בתפקידו).</li>
+        <li>לחץ "חשב זכאות".</li>
+        <li>צפה בתוצאות בטבלה והורד קובץ אקסל מסכם.</li>
+      </ol>
+      <p class="note">
+        <strong>פרטיות:</strong> כל החישוב מתבצע בדפדפן שלך. שום קובץ לא נשלח לשרת.
+      </p>
+    </section>
+
+    <section class="upload-grid">
+      <div class="upload-card" data-key="employees">
+        <div class="upload-title">1. פרטי עובדים</div>
+        <div class="upload-desc">קובץ ממיכפל עם רשימת העובדים, מתכונת (5/6) וותק</div>
+        <input type="file" id="file-employees" accept=".xlsx,.xls">
+        <label for="file-employees" class="upload-button">בחר קובץ</label>
+        <div class="upload-status" id="status-employees">לא נבחר קובץ</div>
+      </div>
+
+      <div class="upload-card" data-key="three_months">
+        <div class="upload-title">2. נוכחות 3 חודשים</div>
+        <div class="upload-desc">ינואר–מרץ 2026 לחישוב ממוצע שעות ויתרת חופש</div>
+        <input type="file" id="file-three_months" accept=".xlsx,.xls">
+        <label for="file-three_months" class="upload-button">בחר קובץ</label>
+        <div class="upload-status" id="status-three_months">לא נבחר קובץ</div>
+      </div>
+
+      <div class="upload-card" data-key="april">
+        <div class="upload-title">3. נוכחות אפריל</div>
+        <div class="upload-desc">פילטר רלוונטיות – רק עובדים שעבדו באפריל ייכנסו לחישוב</div>
+        <input type="file" id="file-april" accept=".xlsx,.xls">
+        <label for="file-april" class="upload-button">בחר קובץ</label>
+        <div class="upload-status" id="status-april">לא נבחר קובץ</div>
+      </div>
+
+      <div class="upload-card" data-key="march31">
+        <div class="upload-title">4. נוכחות 31.3</div>
+        <div class="upload-desc">לזכאות פסח א</div>
+        <input type="file" id="file-march31" accept=".xlsx,.xls">
+        <label for="file-march31" class="upload-button">בחר קובץ</label>
+        <div class="upload-status" id="status-march31">לא נבחר קובץ</div>
+      </div>
+
+      <div class="upload-card" data-key="april9">
+        <div class="upload-title">5. נוכחות 9.4</div>
+        <div class="upload-desc">לזכאות פסח ב</div>
+        <input type="file" id="file-april9" accept=".xlsx,.xls">
+        <label for="file-april9" class="upload-button">בחר קובץ</label>
+        <div class="upload-status" id="status-april9">לא נבחר קובץ</div>
+      </div>
+    </section>
+
+    <section class="actions">
+      <button id="calculate-btn" disabled>חשב זכאות</button>
+      <button id="download-btn" disabled>הורד אקסל</button>
+      <div id="message" class="message"></div>
+    </section>
+
+    <section class="results-section" id="results-section" hidden>
+      <h2>תוצאות</h2>
+      <div class="summary" id="summary"></div>
+      <div class="table-wrapper">
+        <table id="results-table">
+          <thead></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <small>חישוב זכאות פסח · רץ בצד הלקוח · ללא שרת</small>
+  </footer>
+
+  <script src="js/parser.js"></script>
+  <script src="js/eligibility.js"></script>
+  <script src="js/exporter.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>

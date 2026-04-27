@@ -1,0 +1,177 @@
+/* RTL Hebrew styling for Pesach eligibility calculator */
+* { box-sizing: border-box; }
+
+body {
+  font-family: -apple-system, "Segoe UI", "Helvetica Neue", Arial, "Heebo", sans-serif;
+  margin: 0;
+  background: #f4f6fa;
+  color: #1f2937;
+  line-height: 1.5;
+}
+
+header {
+  background: linear-gradient(135deg, #4f46e5, #7c3aed);
+  color: white;
+  padding: 28px 24px;
+  text-align: center;
+}
+
+header h1 { margin: 0; font-size: 28px; font-weight: 700; }
+.subtitle { margin: 6px 0 0; opacity: 0.92; font-size: 15px; }
+
+main {
+  max-width: 1200px;
+  margin: 24px auto;
+  padding: 0 16px;
+}
+
+.info-box {
+  background: white;
+  border-radius: 12px;
+  padding: 18px 22px;
+  margin-bottom: 24px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+.info-box h2 { margin-top: 0; font-size: 18px; }
+.info-box ol { margin: 8px 0 0; padding-right: 22px; }
+.info-box .note { background: #fef3c7; padding: 8px 12px; border-radius: 6px; margin-top: 10px; font-size: 14px; }
+
+.upload-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px;
+  margin-bottom: 24px;
+}
+
+.upload-card {
+  background: white;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 2px solid transparent;
+  transition: border-color 0.2s, transform 0.1s;
+}
+.upload-card.loaded {
+  border-color: #10b981;
+  background: #f0fdf4;
+}
+.upload-card.error {
+  border-color: #ef4444;
+  background: #fef2f2;
+}
+.upload-title { font-weight: 700; font-size: 15px; }
+.upload-desc { font-size: 13px; color: #6b7280; min-height: 36px; }
+.upload-card input[type=file] { display: none; }
+.upload-button {
+  display: inline-block;
+  background: #4f46e5;
+  color: white;
+  padding: 8px 14px;
+  border-radius: 6px;
+  text-align: center;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  user-select: none;
+}
+.upload-button:hover { background: #4338ca; }
+.upload-status { font-size: 12px; color: #6b7280; min-height: 16px; word-break: break-all; }
+.upload-card.loaded .upload-status { color: #047857; font-weight: 600; }
+.upload-card.error .upload-status { color: #b91c1c; font-weight: 600; }
+
+.actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.actions button {
+  background: #4f46e5;
+  color: white;
+  border: none;
+  padding: 12px 28px;
+  font-size: 16px;
+  font-weight: 600;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.1s;
+}
+.actions button:hover:not(:disabled) { background: #4338ca; }
+.actions button:active:not(:disabled) { transform: scale(0.98); }
+.actions button:disabled { background: #d1d5db; cursor: not-allowed; }
+#download-btn { background: #10b981; }
+#download-btn:hover:not(:disabled) { background: #059669; }
+
+.message {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 500;
+}
+.message.success { color: #047857; }
+.message.error { color: #b91c1c; }
+.message.info { color: #1d4ed8; }
+
+.results-section {
+  background: white;
+  border-radius: 12px;
+  padding: 18px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+.results-section h2 { margin-top: 0; }
+.summary {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.summary-card {
+  background: #f3f4f6;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 14px;
+}
+.summary-card strong { color: #4f46e5; font-size: 18px; display: block; }
+
+.table-wrapper {
+  overflow-x: auto;
+  max-height: 600px;
+  overflow-y: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+}
+#results-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  white-space: nowrap;
+}
+#results-table th {
+  background: #f9fafb;
+  position: sticky;
+  top: 0;
+  padding: 8px;
+  text-align: right;
+  font-weight: 600;
+  border-bottom: 2px solid #e5e7eb;
+  z-index: 1;
+}
+#results-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid #f3f4f6;
+}
+#results-table tr:hover td { background: #f9fafb; }
+.cell-yes { color: #047857; font-weight: 600; }
+.cell-no  { color: #b91c1c; font-weight: 600; }
+.cell-num { font-variant-numeric: tabular-nums; text-align: left; direction: ltr; }
+
+footer {
+  text-align: center;
+  padding: 18px;
+  color: #6b7280;
+  font-size: 13px;
+}
