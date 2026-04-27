@@ -114,13 +114,13 @@ const Eligibility = (function () {
     const daysFromBalance = Math.floor(vacationBalance);
     const daysToUse = Math.max(0, Math.min(daysFromBalance, maxDays));
 
-    // Allocate hours per day (chronological, first daysToUse days)
+    // Allocate hours per day (chronological, first daysToUse days). Rounded to 2 decimals.
     const dayHoursByDate = {};
     for (let i = 0; i < dayList.length; i++) {
       const d = dayList[i];
       if (i < daysToUse && avgHoursPerDay > 0) {
         const cap = capFor(d, daysPerWeek);
-        dayHoursByDate[d.date] = Math.min(avgHoursPerDay, cap);
+        dayHoursByDate[d.date] = round2(Math.min(avgHoursPerDay, cap));
       } else {
         dayHoursByDate[d.date] = null; // not used
       }
@@ -141,10 +141,10 @@ const Eligibility = (function () {
       eligibleB,
       reasonA: reason(eligibleA, status31),
       reasonB: reason(eligibleB, status9),
-      totalWorkHours,
+      totalWorkHours: round2(totalWorkHours),
       totalWorkDays,
       avgHoursPerDay: round2(avgHoursPerDay),
-      vacationBalance,
+      vacationBalance: round2(vacationBalance),
       daysToUse,
       hours_1_4: dayHoursByDate["1.4"],
       hours_3_4: dayHoursByDate["3.4"],

@@ -5,7 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>חישוב זכאות פסח 2026</title>
   <link rel="stylesheet" href="css/style.css">
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <!-- xlsx-js-style: drop-in fork of SheetJS that supports cell styles for output -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 </head>
 <body>
   <header>
@@ -24,6 +25,16 @@
       <p class="note">
         <strong>פרטיות:</strong> כל החישוב מתבצע בדפדפן שלך. שום קובץ לא נשלח לשרת.
       </p>
+    </section>
+
+    <section class="bulk-upload">
+      <label for="bulk-input" class="bulk-zone" id="bulk-zone">
+        <div class="bulk-icon">📥</div>
+        <div class="bulk-title">גרור לכאן את כל 5 הקבצים יחד</div>
+        <div class="bulk-sub">או לחץ לבחירה — הקבצים יזוהו אוטומטית לפי תוכנם (גם אם השם שונה)</div>
+      </label>
+      <input type="file" id="bulk-input" accept=".xlsx,.xls" multiple hidden>
+      <div class="bulk-detected" id="bulk-detected"></div>
     </section>
 
     <section class="upload-grid">
@@ -77,6 +88,65 @@
     <section class="results-section" id="results-section" hidden>
       <h2>תוצאות</h2>
       <div class="summary" id="summary"></div>
+
+      <div class="filters" id="filters">
+        <div class="filter-item">
+          <label>פסח א</label>
+          <select data-filter="eligibleA">
+            <option value="">הכל</option>
+            <option value="yes">רק זכאים</option>
+            <option value="no">רק לא זכאים</option>
+          </select>
+        </div>
+        <div class="filter-item">
+          <label>פסח ב</label>
+          <select data-filter="eligibleB">
+            <option value="">הכל</option>
+            <option value="yes">רק זכאים</option>
+            <option value="no">רק לא זכאים</option>
+          </select>
+        </div>
+        <div class="filter-item">
+          <label>זכאות (כללי)</label>
+          <select data-filter="eligibleAny">
+            <option value="">הכל</option>
+            <option value="any">זכאי לאחד מהחגים</option>
+            <option value="both">זכאי לשני החגים</option>
+            <option value="none">לא זכאי לאף חג</option>
+          </select>
+        </div>
+        <div class="filter-item">
+          <label>ותק</label>
+          <select data-filter="tenure">
+            <option value="">הכל</option>
+            <option value="yes">רק עם ותק</option>
+            <option value="no">רק ללא ותק</option>
+          </select>
+        </div>
+        <div class="filter-item">
+          <label>מתכונת</label>
+          <select data-filter="dpw">
+            <option value="">הכל</option>
+            <option value="5">5 ימים</option>
+            <option value="6">6 ימים</option>
+          </select>
+        </div>
+        <div class="filter-item">
+          <label>ניצול ימי חופש</label>
+          <select data-filter="usage">
+            <option value="">הכל</option>
+            <option value="any">רק עם ניצול</option>
+            <option value="none">רק ללא ניצול</option>
+          </select>
+        </div>
+        <div class="filter-item filter-search">
+          <label>חיפוש</label>
+          <input type="text" id="filter-search" placeholder="שם / מספר עובד">
+        </div>
+        <button id="reset-filters" type="button">איפוס</button>
+        <div class="filter-count" id="filter-count"></div>
+      </div>
+
       <div class="table-wrapper">
         <table id="results-table">
           <thead></thead>
@@ -91,6 +161,7 @@
   </footer>
 
   <script src="js/parser.js"></script>
+  <script src="js/detector.js"></script>
   <script src="js/eligibility.js"></script>
   <script src="js/exporter.js"></script>
   <script src="js/main.js"></script>
