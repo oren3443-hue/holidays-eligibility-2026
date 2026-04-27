@@ -112,6 +112,16 @@ const IndependenceEligibility = (function () {
     return absences.some((ab) => sameCalendarDay(ab.date, win));
   }
 
+  /** Single-word presence type for a calendar day:
+   *  "עבד" if any shift overlaps the day (shift takes precedence),
+   *  else "חופש"/"מחלה"/"מילואים" by absence type, else "—". */
+  function presenceTypeOnDay(shifts, absences, win) {
+    if (hasShiftOverlapping(shifts, win)) return "עבד";
+    const a = absences.find((ab) => sameCalendarDay(ab.date, win));
+    if (!a) return "—";
+    return absenceTypeLabel(a.type);
+  }
+
   function calculateEmployee(empId, sources) {
     const emp = sources.employees.get(empId);
     if (!emp) return null; // employee not in master file → skip per spec
@@ -132,10 +142,11 @@ const IndependenceEligibility = (function () {
 
     const tenureOk = !!(emp.startDate && emp.startDate.getTime() <= TENURE_CUTOFF.getTime());
     const hoursWorkedInWindow = sumHoursInWindow(shifts, HOLIDAY_WINDOW);
-    const presentDayBefore = hasShiftOverlapping(shifts, DAY_BEFORE) || hasAbsenceOnDay(absences, DAY_BEFORE);
-    const presentDayAfter  = hasShiftOverlapping(shifts, DAY_AFTER)  || hasAbsenceOnDay(absences, DAY_AFTER);
-    const workedDayBefore  = hasShiftOverlapping(shifts, DAY_BEFORE);
-    const workedDayAfter   = hasShiftOverlapping(shifts, DAY_AFTER);
+    const presenceType_21_4 = presenceTypeOnDay(shifts, absences, DAY_BEFORE);
+    const presenceType_22_4 = presenceTypeOnDay(shifts, absences, HOLIDAY_DAY);
+    const presenceType_23_4 = presenceTypeOnDay(shifts, absences, DAY_AFTER);
+    const presentDayBefore = presenceType_21_4 !== "—";
+    const presentDayAfter  = presenceType_23_4 !== "—";
     const qualifyingDay    = presentDayBefore || presentDayAfter;
 
     // Can't double-pay: if the employee was on sick leave OR military reserve
@@ -145,6 +156,9 @@ const IndependenceEligibility = (function () {
     // employee still receives the holiday pay).
     const sickOnHoliday     = absences.some((ab) => ab.type === "sick"     && sameCalendarDay(ab.date, HOLIDAY_DAY));
     const militaryOnHoliday = absences.some((ab) => ab.type === "military" && sameCalendarDay(ab.date, HOLIDAY_DAY));
+    // Vacation on 22.4 doesn't disqualify (the vacation day is credited back),
+    // but we surface a warning so the user knows to manually cancel the vacation.
+    const vacationOnHoliday = absences.some((ab) => ab.type === "vacation" && sameCalendarDay(ab.date, HOLIDAY_DAY));
 
     const cap = emp.daysPerWeek === 5 ? 8.4 : emp.daysPerWeek === 6 ? 8 : 0;
     const avgCapped = avgHoursPerDay > 0 && cap > 0 ? round2(Math.min(avgHoursPerDay, cap)) : 0;
@@ -164,6 +178,9 @@ const IndependenceEligibility = (function () {
       mode = "holiday_pay";
       holidayPayHours = avgCapped;
       holidayDaysCount = 1;
+      if (vacationOnHoliday) {
+        reason = "⚠️ בחופש ביום החג (22.4) — בטל את ניצול ימי החופש; נשאר זכאי לתשלום חג";
+      }
     } else {
       mode = "ineligible";
       if (!tenureOk && !qualifyingDay) reason = "אין ותק וגם לא עבד יום לפני/אחרי";
@@ -195,10 +212,9 @@ const IndependenceEligibility = (function () {
       startDate: emp.startDate,
       tenureOk,
       branches,
-      presentDayBefore,
-      presentDayAfter,
-      workedDayBefore,
-      workedDayAfter,
+      presenceType_21_4,
+      presenceType_22_4,
+      presenceType_23_4,
       hours_21_4,
       hours_22_4,
       hours_23_4,
