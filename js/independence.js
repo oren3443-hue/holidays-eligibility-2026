@@ -28,6 +28,12 @@ const IndependenceEligibility = (function () {
     start: new Date(2026, 3, 21, 0, 0, 0),
     end:   new Date(2026, 3, 21, 23, 59, 59, 999),
   };
+  // The Atzmaut calendar day itself (22.4 full day). Used to detect overlap
+  // with sick leave — can't double-pay holiday pay AND sick pay for the same day.
+  const HOLIDAY_DAY = {
+    start: new Date(2026, 3, 22, 0, 0, 0),
+    end:   new Date(2026, 3, 22, 23, 59, 59, 999),
+  };
   const DAY_AFTER = {
     start: new Date(2026, 3, 23, 0, 0, 0),
     end:   new Date(2026, 3, 23, 23, 59, 59, 999),
@@ -64,13 +70,60 @@ const IndependenceEligibility = (function () {
     return "לא זכאי";
   }
 
+  function sameCalendarDay(d, win) {
+    return d.getTime() >= win.start.getTime() && d.getTime() <= win.end.getTime();
+  }
+
+  function absenceTypeLabel(t) {
+    if (t === "vacation") return "חופש";
+    if (t === "sick") return "מחלה";
+    if (t === "military") return "מילואים";
+    return "";
+  }
+
+  /** Sum of shift hours that fall on a calendar day (full 24h, not the holiday window). */
+  function shiftHoursOnDay(shifts, win) {
+    let ms = 0;
+    for (const sh of shifts) {
+      ms += overlapMs(sh.entryAt, sh.exitAt, win.start, win.end);
+    }
+    return ms / 3600000;
+  }
+
+  /** Build a human-readable presence string for a calendar day:
+   *  e.g. "06:00→14:00; 18:00→02:00" or "חופש" or "—" */
+  function presenceOnDay(shifts, absences, win) {
+    const overlapping = shifts.filter((sh) => overlapMs(sh.entryAt, sh.exitAt, win.start, win.end) > 0);
+    const fmt = (d) => `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+    const parts = overlapping.map((sh) => {
+      // Show portion of shift that touches this day (capped to day boundaries when crosses midnight)
+      const s = sh.entryAt.getTime() < win.start.getTime() ? win.start : sh.entryAt;
+      const e = sh.exitAt.getTime()  > win.end.getTime()   ? win.end   : sh.exitAt;
+      const crossed = sh.exitAt.getTime() > win.end.getTime() || sh.entryAt.getTime() < win.start.getTime();
+      return `${fmt(s)}→${fmt(e)}${crossed ? "*" : ""}`;
+    });
+    if (parts.length) return parts.join("; ");
+    const a = absences.find((ab) => sameCalendarDay(ab.date, win));
+    if (a) return absenceTypeLabel(a.type);
+    return "—";
+  }
+
+  function hasAbsenceOnDay(absences, win) {
+    return absences.some((ab) => sameCalendarDay(ab.date, win));
+  }
+
   function calculateEmployee(empId, sources) {
     const emp = sources.employees.get(empId);
     if (!emp) return null; // employee not in master file → skip per spec
 
     const shiftRec = sources.shifts.get(empId);
     const shifts = (shiftRec && shiftRec.shifts) || [];
-    if (shifts.length === 0) return null; // no shifts in 20.4-23.4 → not relevant
+    const absences = (shiftRec && shiftRec.absences) || [];
+    if (shifts.length === 0 && absences.length === 0) return null;
+
+    // Military-only filter: no shifts AND every absence is military → exclude entirely
+    const nonMilitaryAbsences = absences.filter((a) => a.type !== "military");
+    if (shifts.length === 0 && nonMilitaryAbsences.length === 0) return null;
 
     const three = sources.threeMonths.get(empId);
     const totalWorkHours = three ? three.workHours : 0;
@@ -79,9 +132,15 @@ const IndependenceEligibility = (function () {
 
     const tenureOk = !!(emp.startDate && emp.startDate.getTime() <= TENURE_CUTOFF.getTime());
     const hoursWorkedInWindow = sumHoursInWindow(shifts, HOLIDAY_WINDOW);
-    const workedDayBefore = hasShiftOverlapping(shifts, DAY_BEFORE);
-    const workedDayAfter  = hasShiftOverlapping(shifts, DAY_AFTER);
-    const qualifyingDay   = workedDayBefore || workedDayAfter;
+    const presentDayBefore = hasShiftOverlapping(shifts, DAY_BEFORE) || hasAbsenceOnDay(absences, DAY_BEFORE);
+    const presentDayAfter  = hasShiftOverlapping(shifts, DAY_AFTER)  || hasAbsenceOnDay(absences, DAY_AFTER);
+    const workedDayBefore  = hasShiftOverlapping(shifts, DAY_BEFORE);
+    const workedDayAfter   = hasShiftOverlapping(shifts, DAY_AFTER);
+    const qualifyingDay    = presentDayBefore || presentDayAfter;
+
+    // Can't double-pay: if the employee was on sick leave on the holiday day
+    // itself (22.4), their sick pay covers it — no holiday pay on top.
+    const sickOnHoliday = absences.some((ab) => ab.type === "sick" && sameCalendarDay(ab.date, HOLIDAY_DAY));
 
     const cap = emp.daysPerWeek === 5 ? 8.4 : emp.daysPerWeek === 6 ? 8 : 0;
     const avgCapped = avgHoursPerDay > 0 && cap > 0 ? round2(Math.min(avgHoursPerDay, cap)) : 0;
@@ -91,6 +150,10 @@ const IndependenceEligibility = (function () {
     if (hoursWorkedInWindow > 0) {
       mode = "worked";
       extraHolidayHours = round2(hoursWorkedInWindow);
+    } else if (sickOnHoliday) {
+      // Sick leave on 22.4 → sick pay applies, no holiday pay (no double-payment).
+      mode = "ineligible";
+      reason = "במחלה ביום החג (22.4) — מקבל דמי מחלה, לא תשלום חג";
     } else if (qualifyingDay && tenureOk) {
       mode = "holiday_pay";
       holidayPayHours = avgCapped;
@@ -105,7 +168,15 @@ const IndependenceEligibility = (function () {
     const branches = shiftRec.branches ? Array.from(shiftRec.branches).join(", ") : "";
     const firstName = emp.firstName || (shiftRec.firstName || "");
     const lastName  = emp.lastName  || (shiftRec.lastName  || "");
-    const fullName  = `${firstName} ${lastName}`.trim() || String(empId);
+    const fullName  = shiftRec.fullName || `${firstName} ${lastName}`.trim() || String(empId);
+
+    // Raw per-day totals + presence text for verification
+    const hours_21_4 = round2(shiftHoursOnDay(shifts, DAY_BEFORE));
+    const hours_22_4 = round2(shiftHoursOnDay(shifts, { start: new Date(2026, 3, 22, 0, 0), end: new Date(2026, 3, 22, 23, 59, 59, 999) }));
+    const hours_23_4 = round2(shiftHoursOnDay(shifts, DAY_AFTER));
+    const presence_21_4 = presenceOnDay(shifts, absences, DAY_BEFORE);
+    const presence_22_4 = presenceOnDay(shifts, absences, { start: new Date(2026, 3, 22, 0, 0), end: new Date(2026, 3, 22, 23, 59, 59, 999) });
+    const presence_23_4 = presenceOnDay(shifts, absences, DAY_AFTER);
 
     return {
       empId,
@@ -118,8 +189,16 @@ const IndependenceEligibility = (function () {
       startDate: emp.startDate,
       tenureOk,
       branches,
+      presentDayBefore,
+      presentDayAfter,
       workedDayBefore,
       workedDayAfter,
+      hours_21_4,
+      hours_22_4,
+      hours_23_4,
+      presence_21_4,
+      presence_22_4,
+      presence_23_4,
       hoursWorkedInWindow: round2(hoursWorkedInWindow),
       mode,
       modeLabel: modeLabelOf(mode),
@@ -134,6 +213,8 @@ const IndependenceEligibility = (function () {
   }
 
   function calculateAll(sources) {
+    // Universe = anyone in the shift map (whether shift or absence) AND in employees file.
+    // Military-only filtering happens inside calculateEmployee.
     const ids = [];
     for (const [id] of sources.shifts.entries()) {
       if (sources.employees.has(id)) ids.push(id);

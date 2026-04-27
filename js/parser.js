@@ -169,7 +169,12 @@ const Parser = (function () {
     firstName: ["שם פרטי"],
     lastName:  ["שם משפחה"],
     deptName:  ["מחלקה", "סניף", "ענף"],
+    vacation:  ["ימי חופש"],
+    sick:      ["ימי מחלה"],
+    military:  ["ימי מילואים"],
   };
+  // Required for SHIFT rows (with times). Absence rows (vacation/sick/military)
+  // only need empId+entryDate (no times).
   const SHIFT_REQUIRED = ["empId", "entryDate", "entryTime", "exitTime"];
 
   /** Pick the first row that has at least 3 of the alias keywords — that's the header row. */
@@ -268,22 +273,22 @@ const Parser = (function () {
       if (!r) continue;
       const empId = r[colMap.empId];
       if (empId === null || empId === undefined || empId === "" || empId === 0) continue;
+      // Skip footer summary rows (no full name AND no proper date)
+      const fullNameRaw = colMap.fullName !== undefined ? (r[colMap.fullName] || "") : "";
+      const hasName = colMap.fullName !== undefined ? !!fullNameRaw :
+                      ((colMap.firstName !== undefined && r[colMap.firstName]) || (colMap.lastName !== undefined && r[colMap.lastName]));
       const date = toDate(r[colMap.entryDate]);
+      if (!hasName && !date) continue;
+      if (!date) continue;
       const tIn  = toTimeOfDay(r[colMap.entryTime]);
       const tOut = toTimeOfDay(r[colMap.exitTime]);
-      if (!date || !tIn || !tOut) continue; // skip malformed rows silently
+      const vacation = colMap.vacation !== undefined ? toNumber(r[colMap.vacation]) : 0;
+      const sick     = colMap.sick     !== undefined ? toNumber(r[colMap.sick])     : 0;
+      const military = colMap.military !== undefined ? toNumber(r[colMap.military]) : 0;
 
-      const entryAt = combineDateTime(date, tIn);
-      let exitAt   = combineDateTime(date, tOut);
-      // Midnight-crossing rule: exit before entry → exit is next day
-      if (exitAt.getTime() <= entryAt.getTime()) {
-        exitAt = new Date(exitAt.getTime() + 24 * 3600 * 1000);
-      }
-
+      // Get-or-create employee entry
       let entry = out.get(empId);
       if (!entry) {
-        const fullNameRaw = colMap.fullName !== undefined ? (r[colMap.fullName] || "") : "";
-        // Split "שם עובד" into first/last on first space (best-effort)
         let fn = "", ln = "";
         if (fullNameRaw) {
           const parts = String(fullNameRaw).trim().split(/\s+/);
@@ -301,11 +306,28 @@ const Parser = (function () {
           fullName: fullNameRaw || `${fn} ${ln}`.trim(),
           deptName: colMap.deptName !== undefined ? (r[colMap.deptName] || "") : "",
           shifts: [],
+          absences: [], // [{date: Date, type: "vacation"|"sick"|"military"}]
         };
         out.set(empId, entry);
       }
       entry.branches.add(fileLabel);
-      entry.shifts.push({ entryAt, exitAt, fileLabel });
+
+      if (tIn && tOut) {
+        // Shift row
+        const entryAt = combineDateTime(date, tIn);
+        let exitAt   = combineDateTime(date, tOut);
+        if (exitAt.getTime() <= entryAt.getTime()) {
+          exitAt = new Date(exitAt.getTime() + 24 * 3600 * 1000);
+        }
+        entry.shifts.push({ entryAt, exitAt, fileLabel });
+      } else if (vacation > 0) {
+        entry.absences.push({ date, type: "vacation" });
+      } else if (sick > 0) {
+        entry.absences.push({ date, type: "sick" });
+      } else if (military > 0) {
+        entry.absences.push({ date, type: "military" });
+      }
+      // else: empty row with no times and no absence markers — skip silently
     }
     return out;
   }
@@ -325,11 +347,13 @@ const Parser = (function () {
             deptName: rec.deptName || "",
             branches: new Set(),
             shifts: [],
+            absences: [],
           };
           combined.set(empId, cur);
         }
         rec.branches.forEach((b) => cur.branches.add(b));
         cur.shifts.push(...rec.shifts);
+        if (rec.absences && rec.absences.length) cur.absences.push(...rec.absences);
         if (!cur.firstName && rec.firstName) cur.firstName = rec.firstName;
         if (!cur.lastName  && rec.lastName)  cur.lastName  = rec.lastName;
         if (!cur.fullName  && rec.fullName)  cur.fullName  = rec.fullName;
