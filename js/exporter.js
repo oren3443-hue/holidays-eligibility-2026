@@ -49,6 +49,43 @@ const Exporter = (function () {
     { key: "holidayPayHours", header: "שעות חג לתשלום", type: "number", numFmt: "0.00", width: 16, blankIfZero: true },
   ];
 
+  // ===== Yom HaAtzmaut (Independence Day) =====
+  const COLUMNS_INDEPENDENCE = [
+    { key: "empId", header: "מספר עובד", type: "number", width: 11 },
+    { key: "firstName", header: "שם פרטי", type: "string", width: 14 },
+    { key: "lastName", header: "שם משפחה", type: "string", width: 14 },
+    { key: "deptName", header: "מחלקה", type: "string", width: 16 },
+    { key: "deptNumber", header: "מס' מחלקה (מיכפל)", type: "number", width: 14 },
+    { key: "branches", header: "סניפים", type: "string", width: 18 },
+    { key: "daysPerWeek", header: "מתכונת (5/6)", type: "number", width: 11 },
+    { key: "startDate", header: "תאריך תחילת עבודה", type: "date", width: 16 },
+    { key: "tenureOk", header: "ותק תקין?", fmt: "yesno", width: 10 },
+    { key: "workedDayBefore", header: "עבד 21.4", fmt: "yesno", width: 10 },
+    { key: "workedDayAfter", header: "עבד 23.4", fmt: "yesno", width: 10 },
+    { key: "hoursWorkedInWindow", header: "שעות בחלון 20:00-20:00", type: "number", numFmt: "0.00", width: 18 },
+    { key: "modeLabel", header: "מצב", type: "string", width: 16 },
+    { key: "totalWorkHours", header: 'ש"ע בפועל (3 חודשים)', type: "number", numFmt: "0.00", width: 16 },
+    { key: "totalWorkDays", header: 'י"ע בפועל (3 חודשים)', type: "number", width: 14 },
+    { key: "avgHoursPerDay", header: "ממוצע שעות יומי", type: "number", numFmt: "0.00", width: 14 },
+    { key: "holidayDaysCount", header: "ימי חג", type: "number", width: 9 },
+    { key: "holidayPayHours", header: "שעות חג (תשלום)", type: "number", numFmt: "0.00", width: 14 },
+    { key: "extraHolidayHours", header: "תוספת שעות חג 100 אחוז", type: "number", numFmt: "0.00", width: 22 },
+    { key: "reason", header: "הערה", type: "string", width: 22 },
+  ];
+
+  // Import file for Independence Day. Format matches the Shavuot sample exactly:
+  //   row 1: [companyNumber, year, month, null, null, null]
+  //   row 2: 6 column headers
+  //   row 3+: data, with zero values written as truly empty cells.
+  const IMPORT_COLUMNS_INDEPENDENCE = [
+    { key: "empId", header: "מספר עובד", type: "number", width: 11, blankIfZero: false },
+    { key: "fullName", header: "שם העובד", type: "string", width: 22, blankIfZero: false },
+    { key: "deptNumber", header: "מחלקה (מיכפל)", type: "number", width: 14, blankIfZero: false },
+    { key: "holidayDaysCount", header: "ימי חג", type: "number", width: 9, blankIfZero: true },
+    { key: "holidayPayHours", header: "שעות חג לתשלום", type: "number", numFmt: "0.00", width: 16, blankIfZero: true },
+    { key: "extraHolidayHours", header: "תוספת שעות חג 100 אחוז", type: "number", numFmt: "0.00", width: 22, blankIfZero: true },
+  ];
+
   // Style palette
   const COLOR = {
     headerBg: "4F46E5",   // indigo-600
@@ -77,7 +114,7 @@ const Exporter = (function () {
     };
   }
 
-  function bodyStyle({ alt, key, value }) {
+  function bodyStyle({ alt, key, value, columns }) {
     const base = {
       alignment: { horizontal: "right", vertical: "center", readingOrder: 2 },
       border: thinBorder(),
@@ -85,8 +122,10 @@ const Exporter = (function () {
     };
     if (alt) base.fill = { fgColor: { rgb: COLOR.rowAlt } };
 
-    // Yes/No coloring on eligibility + tenure cells
-    if (key === "eligibleA" || key === "eligibleB" || key === "tenureOk") {
+    const col = (columns || COLUMNS).find((c) => c.key === key);
+
+    // Yes/No coloring (driven by fmt:"yesno" rather than a hardcoded key list)
+    if (col && col.fmt === "yesno") {
       const yes = value === true || value === "כן";
       base.fill = { fgColor: { rgb: yes ? COLOR.yes : COLOR.no } };
       base.font = { sz: 10, bold: true, color: { rgb: yes ? COLOR.yesText : COLOR.noText } };
@@ -94,7 +133,6 @@ const Exporter = (function () {
     }
 
     // Numeric cells: align center for compactness
-    const col = COLUMNS.find((c) => c.key === key);
     if (col && col.type === "number") {
       base.alignment.horizontal = "center";
       if (col.numFmt) base.numFmt = col.numFmt;
@@ -191,7 +229,7 @@ const Exporter = (function () {
         const cell = buildCell(value, col.fmt, col.type);
         if (cell === null) return; // skip — leaves the cell truly empty
         if (col.numFmt && cell.t === "n") cell.z = col.numFmt;
-        if (styled) cell.s = bodyStyle({ alt, key: col.key, value: cell.v });
+        if (styled) cell.s = bodyStyle({ alt, key: col.key, value: cell.v, columns });
         ws[addr] = cell;
       });
     });
@@ -256,6 +294,30 @@ const Exporter = (function () {
     XLSX.writeFile(wb, fname);
   }
 
+  /** Independence Day: full report. */
+  function exportXlsxIndependence(rows, filename) {
+    const ws = buildSheet(rows, COLUMNS_INDEPENDENCE, { styled: true });
+    const wb = buildWorkbook(ws, "זכאות יום העצמאות");
+    const fname = filename || `זכאות-יום-העצמאות-${todayStr()}.xlsx`;
+    XLSX.writeFile(wb, fname, { cellStyles: true });
+  }
+
+  /** Independence Day: payroll import file (מיכפל). */
+  function exportImportXlsxIndependence(rows, filename, meta) {
+    const m = meta || { companyNumber: 10, year: 2026, month: 4 };
+    const metaRow = [m.companyNumber, m.year, m.month, null, null, null];
+    const ws = buildSheet(rows, IMPORT_COLUMNS_INDEPENDENCE, {
+      styled: false,
+      metaRow,
+      autofilter: false,
+      freeze: false,
+      rtl: true,
+    });
+    const wb = buildWorkbook(ws, "גיליון1");
+    const fname = filename || `קליטה-יום-העצמאות-${m.year}-${String(m.month).padStart(2,"0")}.xlsx`;
+    XLSX.writeFile(wb, fname);
+  }
+
   function todayStr() {
     const d = new Date();
     const dd = String(d.getDate()).padStart(2, "0");
@@ -264,5 +326,14 @@ const Exporter = (function () {
     return `${yy}-${mm}-${dd}`;
   }
 
-  return { exportXlsx, exportImportXlsx, COLUMNS, IMPORT_COLUMNS };
+  return {
+    exportXlsx,
+    exportImportXlsx,
+    exportXlsxIndependence,
+    exportImportXlsxIndependence,
+    COLUMNS,
+    IMPORT_COLUMNS,
+    COLUMNS_INDEPENDENCE,
+    IMPORT_COLUMNS_INDEPENDENCE,
+  };
 })();

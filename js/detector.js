@@ -46,6 +46,19 @@ const Detector = (function () {
       return { type: "three_months" };
     }
 
+    // 2.5) Detailed shift report (יום העצמאות): per-branch file with rows-per-shift.
+    //      Distinctive signature: a header row (in first 15 rows) that has BOTH a
+    //      shift-start and shift-end column. We accept either of the alias pairs.
+    for (let i = 0; i < Math.min(rows.length, 15); i++) {
+      const r = rows[i];
+      if (!r) continue;
+      const hasStart = rowContains(r, "שעת התחלה") || rowContains(r, "שעת כניסה");
+      const hasEnd   = rowContains(r, "שעת סיום")  || rowContains(r, "שעת יציאה");
+      if (hasStart && hasEnd) {
+        return { type: "shift_report" };
+      }
+    }
+
     // 3) Daily attendance: header row 2 has "מס' עובד במע' שכר".
     //    Title row 1 contains "דוח שכר" + a date range like "31/03/26 - 31/03/26".
     if (rows.length >= 2 && rows[1]) {
@@ -99,6 +112,8 @@ const Detector = (function () {
     april: "נוכחות אפריל",
     march31: "נוכחות 31.3",
     april9: "נוכחות 9.4",
+    shift_report: "דוח שעות מפורט",
+    shift_reports: "דוחות שעות סניפים",
   };
 
   return { detect, detectFromRows, LABEL };

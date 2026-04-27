@@ -3,19 +3,24 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>חישוב זכאות פסח 2026</title>
+  <title>חישוב זכאויות לחגים 2026</title>
   <link rel="stylesheet" href="css/style.css">
   <!-- xlsx-js-style: drop-in fork of SheetJS that supports cell styles for output -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 </head>
 <body>
   <header>
-    <h1>חישוב זכאות פסח 2026</h1>
-    <p class="subtitle">פסח א · חול המועד · פסח ב — חישוב אוטומטי לכל עובד</p>
+    <h1>חישוב זכאויות לחגים 2026</h1>
+    <p class="subtitle" id="subtitle">פסח א · חול המועד · פסח ב — חישוב אוטומטי לכל עובד</p>
   </header>
 
   <main>
-    <section class="info-box">
+    <nav class="holiday-tabs" id="holiday-tabs" role="tablist" aria-label="בחירת חג">
+      <button type="button" class="holiday-tab active" data-holiday="pesach" role="tab" aria-selected="true">פסח</button>
+      <button type="button" class="holiday-tab" data-holiday="independence" role="tab" aria-selected="false">יום העצמאות</button>
+    </nav>
+
+    <section class="info-box" data-mode="pesach">
       <h2>איך זה עובד?</h2>
       <ol>
         <li>העלה את 5 קבצי האקסל (סדר לא חשוב, כל קובץ מסומן בתפקידו).</li>
@@ -27,7 +32,19 @@
       </p>
     </section>
 
-    <section class="bulk-upload">
+    <section class="info-box" data-mode="independence" hidden>
+      <h2>איך זה עובד?</h2>
+      <ol>
+        <li>העלה את <strong>פרטי עובדים</strong> ו<strong>נוכחות 3 חודשים</strong> (כמו בפסח).</li>
+        <li>גרור את כל <strong>דוחות שעות הסניפים</strong> (20.4–23.4) לאזור הייעודי — הקבצים יזוהו אוטומטית.</li>
+        <li>לחץ "חשב זכאות". עובדים שעבדו בחלון 21.4 20:00 → 22.4 20:00 יקבלו רכיב <em>תוספת שעות חג 100%</em>; אחרים שעבדו 21.4 או 23.4 ויש להם ותק יקבלו <em>תשלום חג</em> (ממוצע 3 חודשים).</li>
+      </ol>
+      <p class="note">
+        <strong>פרטיות:</strong> כל החישוב מתבצע בדפדפן שלך. שום קובץ לא נשלח לשרת.
+      </p>
+    </section>
+
+    <section class="bulk-upload" data-mode="pesach">
       <label for="bulk-input" class="bulk-zone" id="bulk-zone">
         <div class="bulk-icon">📥</div>
         <div class="bulk-title">גרור לכאן את כל 5 הקבצים יחד</div>
@@ -37,7 +54,7 @@
       <div class="bulk-detected" id="bulk-detected"></div>
     </section>
 
-    <section class="upload-grid">
+    <section class="upload-grid" data-mode="pesach">
       <div class="upload-card" data-key="employees">
         <div class="upload-title">1. פרטי עובדים</div>
         <div class="upload-desc">קובץ ממיכפל עם רשימת העובדים, מתכונת (5/6) וותק</div>
@@ -79,6 +96,35 @@
       </div>
     </section>
 
+    <!-- Independence Day upload section -->
+    <section class="upload-grid" data-mode="independence" hidden>
+      <div class="upload-card" data-key="ind_employees">
+        <div class="upload-title">1. פרטי עובדים</div>
+        <div class="upload-desc">אותו קובץ ממיכפל</div>
+        <input type="file" id="file-ind_employees" accept=".xlsx,.xls">
+        <label for="file-ind_employees" class="upload-button">בחר קובץ</label>
+        <div class="upload-status" id="status-ind_employees">לא נבחר קובץ</div>
+      </div>
+
+      <div class="upload-card" data-key="ind_three_months">
+        <div class="upload-title">2. נוכחות 3 חודשים</div>
+        <div class="upload-desc">3 חודשים אחורה לחישוב ממוצע שעות יומי</div>
+        <input type="file" id="file-ind_three_months" accept=".xlsx,.xls">
+        <label for="file-ind_three_months" class="upload-button">בחר קובץ</label>
+        <div class="upload-status" id="status-ind_three_months">לא נבחר קובץ</div>
+      </div>
+    </section>
+
+    <section class="shift-reports-zone" data-mode="independence" hidden>
+      <label for="shift-reports-input" class="bulk-zone" id="shift-reports-zone">
+        <div class="bulk-icon">🏪</div>
+        <div class="bulk-title">3. דוחות שעות סניפים — גרור את כל הקבצים יחד</div>
+        <div class="bulk-sub">קובץ נפרד לכל סניף לתאריכים 20.4–23.4. שמות העמודות זהים אך מיקומיהם יכולים להשתנות.</div>
+      </label>
+      <input type="file" id="shift-reports-input" accept=".xlsx,.xls" multiple hidden>
+      <div class="bulk-detected" id="shift-reports-detected"></div>
+    </section>
+
     <section class="actions">
       <button id="calculate-btn" disabled>חשב זכאות</button>
       <button id="download-btn" disabled title="פלט מלא לבדיקה — כל העמודות הגולמיות והמחושבות">הורד אקסל מלא</button>
@@ -106,7 +152,7 @@
       <h2>תוצאות</h2>
       <div class="summary" id="summary"></div>
 
-      <div class="filters" id="filters">
+      <div class="filters" id="filters" data-mode="pesach">
         <div class="filter-item">
           <label>פסח א</label>
           <select data-filter="eligibleA">
@@ -164,6 +210,40 @@
         <div class="filter-count" id="filter-count"></div>
       </div>
 
+      <div class="filters" id="filters-ind" data-mode="independence" hidden>
+        <div class="filter-item">
+          <label>מצב</label>
+          <select data-filter="mode">
+            <option value="">הכל</option>
+            <option value="worked">עבד בחג</option>
+            <option value="holiday_pay">זכאי תשלום חג</option>
+            <option value="ineligible">לא זכאי</option>
+          </select>
+        </div>
+        <div class="filter-item">
+          <label>ותק</label>
+          <select data-filter="tenure">
+            <option value="">הכל</option>
+            <option value="yes">רק עם ותק</option>
+            <option value="no">רק ללא ותק</option>
+          </select>
+        </div>
+        <div class="filter-item">
+          <label>מתכונת</label>
+          <select data-filter="dpw">
+            <option value="">הכל</option>
+            <option value="5">5 ימים</option>
+            <option value="6">6 ימים</option>
+          </select>
+        </div>
+        <div class="filter-item filter-search">
+          <label>חיפוש</label>
+          <input type="text" id="filter-search-ind" placeholder="שם / מספר עובד / סניף">
+        </div>
+        <button id="reset-filters-ind" type="button">איפוס</button>
+        <div class="filter-count" id="filter-count-ind"></div>
+      </div>
+
       <div class="table-wrapper">
         <table id="results-table">
           <thead></thead>
@@ -174,12 +254,13 @@
   </main>
 
   <footer>
-    <small>חישוב זכאות פסח · רץ בצד הלקוח · ללא שרת</small>
+    <small>חישוב זכאויות לחגים · רץ בצד הלקוח · ללא שרת</small>
   </footer>
 
   <script src="js/parser.js"></script>
   <script src="js/detector.js"></script>
   <script src="js/eligibility.js"></script>
+  <script src="js/independence.js"></script>
   <script src="js/exporter.js"></script>
   <script src="js/main.js"></script>
 </body>

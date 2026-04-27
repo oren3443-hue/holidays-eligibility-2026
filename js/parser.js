@@ -154,11 +154,198 @@ const Parser = (function () {
     return map;
   }
 
+  // ===== Detailed shift report (יום העצמאות) =====
+  // Per-branch files: same column NAMES but different positions, so we look up by header.
+
+  // Header aliases for required & optional fields. First exact match wins,
+  // then fallback to partial match. Order matters — payroll-system ID first
+  // so we don't accidentally match the internal branch employee number ("מספר עובד").
+  const SHIFT_HEADER_ALIASES = {
+    empId:     ["מס' עובד במע' שכר", "מס' עובד", "מס עובד", "קוד עובד", "מספר עובד"],
+    entryDate: ["תאריך כניסה", "תאריך משמרת", "תאריך"],
+    entryTime: ["שעת התחלה", "שעת כניסה", "כניסה"],
+    exitTime:  ["שעת סיום", "שעת יציאה", "יציאה"],
+    fullName:  ["שם עובד", "שם העובד"],
+    firstName: ["שם פרטי"],
+    lastName:  ["שם משפחה"],
+    deptName:  ["מחלקה", "סניף", "ענף"],
+  };
+  const SHIFT_REQUIRED = ["empId", "entryDate", "entryTime", "exitTime"];
+
+  /** Pick the first row that has at least 3 of the alias keywords — that's the header row. */
+  function findHeaderRow(rows) {
+    let best = -1, bestScore = 0;
+    const keywords = Object.values(SHIFT_HEADER_ALIASES).flat();
+    for (let i = 0; i < Math.min(rows.length, 15); i++) {
+      const r = rows[i];
+      if (!r) continue;
+      let score = 0;
+      const flat = r.map((c) => (c == null ? "" : String(c).trim()));
+      for (const kw of keywords) {
+        if (flat.some((v) => v === kw || v.includes(kw))) score++;
+      }
+      if (score > bestScore) {
+        bestScore = score;
+        best = i;
+      }
+    }
+    return bestScore >= 3 ? best : -1;
+  }
+
+  /** Build {field: colIdx} map from a header row using aliases. */
+  function mapShiftColumns(headerRow) {
+    const result = {};
+    const flat = headerRow.map((c) => (c == null ? "" : String(c).trim()));
+    for (const [field, aliases] of Object.entries(SHIFT_HEADER_ALIASES)) {
+      for (const alias of aliases) {
+        let idx = flat.findIndex((v) => v === alias);
+        if (idx < 0) idx = flat.findIndex((v) => v.includes(alias));
+        if (idx >= 0) {
+          result[field] = idx;
+          break;
+        }
+      }
+    }
+    return result;
+  }
+
+  /** Parse Excel time-of-day. Returns { h, m } or null.
+   *  Handles: number 0..1 (Excel time fraction), "HH:MM", "HH:MM:SS", Date. */
+  function toTimeOfDay(v) {
+    if (v === null || v === undefined || v === "") return null;
+    if (v instanceof Date) {
+      return { h: v.getHours(), m: v.getMinutes() };
+    }
+    if (typeof v === "number") {
+      // Excel time fraction (0–1) OR full serial — we only want HH:MM portion
+      const frac = v - Math.floor(v);
+      const totalMin = Math.round(frac * 24 * 60);
+      const h = Math.floor(totalMin / 60) % 24;
+      const m = totalMin % 60;
+      return { h, m };
+    }
+    if (typeof v === "string") {
+      const m = v.trim().match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+      if (!m) return null;
+      return { h: parseInt(m[1], 10), m: parseInt(m[2], 10) };
+    }
+    return null;
+  }
+
+  /** Combine a date and a time-of-day into one Date. */
+  function combineDateTime(date, tod) {
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate(), tod.h, tod.m, 0);
+  }
+
+  /**
+   * Parse one detailed shift report file.
+   * @param {Array<Array>} rows - sheet rows
+   * @param {string} fileLabel - human-friendly label (filename without extension), used in errors and as branch fallback
+   * @returns {Map<empId, {empId, branches:Set<string>, firstName?, lastName?, deptName?, shifts: Shift[]}>}
+   * @throws Error with file label + missing column on malformed file.
+   */
+  function parseShiftReport(rows, fileLabel) {
+    const headerIdx = findHeaderRow(rows);
+    if (headerIdx < 0) {
+      throw new Error(`קובץ "${fileLabel}": לא נמצאה שורת כותרת מזוהה (מצופה: מספר עובד, תאריך כניסה, שעת כניסה, שעת יציאה).`);
+    }
+    const colMap = mapShiftColumns(rows[headerIdx]);
+    const missing = SHIFT_REQUIRED.filter((f) => colMap[f] === undefined);
+    if (missing.length) {
+      const labelMap = {
+        empId: "מספר עובד",
+        entryDate: "תאריך כניסה",
+        entryTime: "שעת כניסה",
+        exitTime: "שעת יציאה",
+      };
+      const headers = rows[headerIdx].filter((c) => c != null && String(c).trim() !== "").join(", ");
+      throw new Error(`קובץ "${fileLabel}": חסרה עמודה "${labelMap[missing[0]]}" (כותרות בקובץ: ${headers}).`);
+    }
+
+    const out = new Map();
+    for (let i = headerIdx + 1; i < rows.length; i++) {
+      const r = rows[i];
+      if (!r) continue;
+      const empId = r[colMap.empId];
+      if (empId === null || empId === undefined || empId === "" || empId === 0) continue;
+      const date = toDate(r[colMap.entryDate]);
+      const tIn  = toTimeOfDay(r[colMap.entryTime]);
+      const tOut = toTimeOfDay(r[colMap.exitTime]);
+      if (!date || !tIn || !tOut) continue; // skip malformed rows silently
+
+      const entryAt = combineDateTime(date, tIn);
+      let exitAt   = combineDateTime(date, tOut);
+      // Midnight-crossing rule: exit before entry → exit is next day
+      if (exitAt.getTime() <= entryAt.getTime()) {
+        exitAt = new Date(exitAt.getTime() + 24 * 3600 * 1000);
+      }
+
+      let entry = out.get(empId);
+      if (!entry) {
+        const fullNameRaw = colMap.fullName !== undefined ? (r[colMap.fullName] || "") : "";
+        // Split "שם עובד" into first/last on first space (best-effort)
+        let fn = "", ln = "";
+        if (fullNameRaw) {
+          const parts = String(fullNameRaw).trim().split(/\s+/);
+          fn = parts[0] || "";
+          ln = parts.slice(1).join(" ");
+        } else {
+          fn = colMap.firstName !== undefined ? (r[colMap.firstName] || "") : "";
+          ln = colMap.lastName  !== undefined ? (r[colMap.lastName]  || "") : "";
+        }
+        entry = {
+          empId,
+          branches: new Set(),
+          firstName: fn,
+          lastName: ln,
+          fullName: fullNameRaw || `${fn} ${ln}`.trim(),
+          deptName: colMap.deptName !== undefined ? (r[colMap.deptName] || "") : "",
+          shifts: [],
+        };
+        out.set(empId, entry);
+      }
+      entry.branches.add(fileLabel);
+      entry.shifts.push({ entryAt, exitAt, fileLabel });
+    }
+    return out;
+  }
+
+  /** Merge multiple per-file shift maps into one combined map. */
+  function combineShiftReports(perFileMaps) {
+    const combined = new Map();
+    for (const m of perFileMaps) {
+      for (const [empId, rec] of m.entries()) {
+        let cur = combined.get(empId);
+        if (!cur) {
+          cur = {
+            empId,
+            firstName: rec.firstName || "",
+            lastName: rec.lastName || "",
+            fullName: rec.fullName || "",
+            deptName: rec.deptName || "",
+            branches: new Set(),
+            shifts: [],
+          };
+          combined.set(empId, cur);
+        }
+        rec.branches.forEach((b) => cur.branches.add(b));
+        cur.shifts.push(...rec.shifts);
+        if (!cur.firstName && rec.firstName) cur.firstName = rec.firstName;
+        if (!cur.lastName  && rec.lastName)  cur.lastName  = rec.lastName;
+        if (!cur.fullName  && rec.fullName)  cur.fullName  = rec.fullName;
+        if (!cur.deptName  && rec.deptName)  cur.deptName  = rec.deptName;
+      }
+    }
+    return combined;
+  }
+
   return {
     readSheet,
     parseEmployees,
     parseDaily,
     parseThreeMonths,
+    parseShiftReport,
+    combineShiftReports,
     toDate,
     toNumber,
   };
