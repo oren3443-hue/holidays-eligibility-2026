@@ -329,7 +329,12 @@
       return (r.daysToUse > 0) || (r.totalHolidayHours > 0) ||
              (r.holidayDaysCount > 0) || (r.holidayPayHours > 0);
     });
-    Exporter.exportImportXlsx(filtered);
+    const meta = {
+      companyNumber: parseInt($("#cfg-company").value, 10) || 10,
+      year: parseInt($("#cfg-year").value, 10) || 2026,
+      month: parseInt($("#cfg-month").value, 10) || 4,
+    };
+    Exporter.exportImportXlsx(filtered, undefined, meta);
   }
 
   // Init

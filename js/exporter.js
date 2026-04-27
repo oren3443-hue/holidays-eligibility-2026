@@ -137,16 +137,42 @@ const Exporter = (function () {
     return s;
   }
 
-  /** Build a styled sheet from rows + a column spec. styled=true gives the full detail look. */
+  /** Build a styled sheet from rows + a column spec.
+   *  opts:
+   *    - styled (bool, default true) - apply colors/borders/zebra
+   *    - metaRow (array | null) - prepend an optional metadata row (row 1 in מיכפל imports)
+   *    - autofilter (bool, default true)
+   *    - freeze (bool, default true)
+   *    - rtl (bool, default true)
+   */
   function buildSheet(rows, columns, opts) {
-    const styled = opts && opts.styled !== false; // default true
+    opts = opts || {};
+    const styled = opts.styled !== false;
+    const metaRow = opts.metaRow || null;
+    const autofilter = opts.autofilter !== false;
+    const freeze = opts.freeze !== false;
+    const rtl = opts.rtl !== false;
+
     const ws = {};
     const lastColIdx = columns.length - 1;
-    const lastRowIdx = rows.length;
+    const headerRowIdx = metaRow ? 2 : 1; // 1-based row number for the header row
+    const dataStartRow = headerRowIdx + 1;
+    const lastRowIdx = rows.length + headerRowIdx;
+
+    // Optional metadata row at row 1 (used by payroll software to identify the import)
+    if (metaRow) {
+      metaRow.forEach((val, ci) => {
+        if (val === null || val === undefined || val === "") return; // truly empty
+        const addr = colLetter(ci) + "1";
+        ws[addr] = typeof val === "number"
+          ? { v: val, t: "n" }
+          : { v: String(val), t: "s" };
+      });
+    }
 
     // Header row
     columns.forEach((col, ci) => {
-      const addr = colLetter(ci) + "1";
+      const addr = colLetter(ci) + headerRowIdx;
       ws[addr] = { v: col.header, t: "s", s: styled ? headerStyle() : undefined };
     });
 
@@ -156,7 +182,7 @@ const Exporter = (function () {
     rows.forEach((r, ri) => {
       const alt = ri % 2 === 1;
       columns.forEach((col, ci) => {
-        const addr = colLetter(ci) + (ri + 2);
+        const addr = colLetter(ci) + (ri + dataStartRow);
         let value = r[col.key];
 
         // Per-column "blankIfZero" rule (used by the import file)
@@ -170,12 +196,20 @@ const Exporter = (function () {
       });
     });
 
-    ws["!ref"] = `A1:${colLetter(lastColIdx)}${lastRowIdx + 1}`;
+    ws["!ref"] = `A1:${colLetter(lastColIdx)}${lastRowIdx}`;
     ws["!cols"] = columns.map((c) => ({ wch: c.width || 12 }));
-    if (styled) ws["!rows"] = [{ hpt: 28 }];
-    ws["!autofilter"] = { ref: ws["!ref"] };
-    ws["!freeze"] = { ySplit: 1 };
-    ws["!views"] = [{ rightToLeft: true, state: "frozen", ySplit: 1 }];
+    if (styled) ws["!rows"] = metaRow ? [undefined, { hpt: 28 }] : [{ hpt: 28 }];
+    if (autofilter) {
+      ws["!autofilter"] = {
+        ref: `A${headerRowIdx}:${colLetter(lastColIdx)}${lastRowIdx}`,
+      };
+    }
+    if (freeze) ws["!freeze"] = { ySplit: headerRowIdx };
+    ws["!views"] = [
+      rtl
+        ? { rightToLeft: true, state: freeze ? "frozen" : undefined, ySplit: freeze ? headerRowIdx : undefined }
+        : { state: freeze ? "frozen" : undefined, ySplit: freeze ? headerRowIdx : undefined },
+    ];
     return ws;
   }
 
@@ -195,14 +229,31 @@ const Exporter = (function () {
     XLSX.writeFile(wb, fname, { cellStyles: true });
   }
 
+  /** Default מיכפל import metadata: [companyNumber, year, month].
+   *  - companyNumber: 10 = מאפיית אורן משי (per sample file).
+   *  - year/month: pay period for which the import applies. Pesach 2026 → 4/2026. */
+  const IMPORT_META = { companyNumber: 10, year: 2026, month: 4 };
+
   /** Export the import file for the payroll software (קובץ קליטה).
-   *  Cells with value 0 are left BLANK on columns flagged blankIfZero —
-   *  the payroll software treats blank as "no import" for that field. */
-  function exportImportXlsx(rows, filename) {
-    const ws = buildSheet(rows, IMPORT_COLUMNS, { styled: true });
-    const wb = buildWorkbook(ws, "קליטה");
-    const fname = filename || `קליטה-פסח-${todayStr()}.xlsx`;
-    XLSX.writeFile(wb, fname, { cellStyles: true });
+   *  Layout matches the מיכפל sample file:
+   *    Row 1: [companyNumber, year, month, blank, blank, blank, blank]
+   *    Row 2: column headers
+   *    Row 3+: data
+   *  Cells with value 0 on importable columns are written as TRULY EMPTY cells
+   *  so the payroll software skips that field for that employee. */
+  function exportImportXlsx(rows, filename, meta) {
+    const m = meta || IMPORT_META;
+    const metaRow = [m.companyNumber, m.year, m.month, null, null, null, null];
+    const ws = buildSheet(rows, IMPORT_COLUMNS, {
+      styled: false,        // payroll software prefers a plain file
+      metaRow,
+      autofilter: false,
+      freeze: false,
+      rtl: true,
+    });
+    const wb = buildWorkbook(ws, "גיליון1"); // match sample's sheet name
+    const fname = filename || `קליטה-פסח-${m.year}-${String(m.month).padStart(2,"0")}.xlsx`;
+    XLSX.writeFile(wb, fname);
   }
 
   function todayStr() {

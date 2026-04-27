@@ -166,6 +166,52 @@ main {
 .message.error { color: #b91c1c; }
 .message.info { color: #1d4ed8; }
 
+.import-config {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 18px;
+}
+.import-config summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: #374151;
+  user-select: none;
+}
+.import-config[open] summary { margin-bottom: 10px; }
+.config-grid {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.config-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: #4b5563;
+  font-weight: 600;
+}
+.config-grid input {
+  padding: 6px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 14px;
+  width: 100px;
+}
+.config-grid input:focus {
+  outline: 2px solid #4f46e5;
+  outline-offset: -1px;
+  border-color: #4f46e5;
+}
+.config-note {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: #6b7280;
+}
+
 .results-section {
   background: white;
   border-radius: 12px;

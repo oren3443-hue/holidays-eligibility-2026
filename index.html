@@ -82,9 +82,25 @@
     <section class="actions">
       <button id="calculate-btn" disabled>חשב זכאות</button>
       <button id="download-btn" disabled title="פלט מלא לבדיקה — כל העמודות הגולמיות והמחושבות">הורד אקסל מלא</button>
-      <button id="download-import-btn" disabled class="btn-secondary" title="קובץ קליטה לתוכנת השכר — רק עמודות הקליטה, ערכים אפסיים נשארים ריקים">הורד קובץ קליטה</button>
+      <button id="download-import-btn" disabled class="btn-secondary" title="קובץ קליטה לתוכנת השכר (מיכפל) — רק עמודות הקליטה, ערכים אפסיים נשארים ריקים">הורד קובץ קליטה</button>
       <div id="message" class="message"></div>
     </section>
+
+    <details class="import-config" id="import-config">
+      <summary>הגדרות קובץ קליטה (מיכפל)</summary>
+      <div class="config-grid">
+        <label>מספר חברה
+          <input type="number" id="cfg-company" value="10" min="1">
+        </label>
+        <label>שנה
+          <input type="number" id="cfg-year" value="2026" min="2020" max="2100">
+        </label>
+        <label>חודש
+          <input type="number" id="cfg-month" value="4" min="1" max="12">
+        </label>
+      </div>
+      <p class="config-note">ערכים אלה נכנסים לשורה הראשונה של קובץ הקליטה (תקופת התשלום).</p>
+    </details>
 
     <section class="results-section" id="results-section" hidden>
       <h2>תוצאות</h2>
