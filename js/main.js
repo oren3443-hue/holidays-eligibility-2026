@@ -346,6 +346,107 @@
     });
   }
 
+  // ===== Shavuot bulk upload (drop all 4 files, auto-mapped) =====
+  const SHV_LABEL = {
+    shv_employees: "פרטי עובדים",
+    shv_three_months: "נוכחות 3 חודשים",
+    shv_before: "דוח שכר — לפני החג",
+    shv_after: "דוח שכר — אחרי החג",
+  };
+
+  // The two network-pay reports are structurally identical; they're told apart by
+  // the date range in their title row relative to the holiday (Shavuot = 22.5).
+  function classifyShavuotFile(result) {
+    if (!result) return null;
+    if (result.type === "employees") return "shv_employees";
+    if (result.type === "three_months") return "shv_three_months";
+    if (result.startMonth != null && result.endMonth != null) {
+      const HOLIDAY_MONTH = 5, HOLIDAY = HOLIDAY_MONTH * 100 + 22; // 22.5.2026
+      // Only the May-window reports are the Shavuot pair; this keeps a stray
+      // March/April attendance file (also a "daily" report) from misrouting.
+      const inHolidayMonth = result.startMonth === HOLIDAY_MONTH || result.endMonth === HOLIDAY_MONTH;
+      if (inHolidayMonth) {
+        const startVal = result.startMonth * 100 + result.startDay;
+        const endVal = result.endMonth * 100 + result.endDay;
+        if (endVal < HOLIDAY) return "shv_before";
+        if (startVal > HOLIDAY) return "shv_after";
+      }
+    }
+    return null;
+  }
+
+  async function handleShavuotBulkFiles(fileList) {
+    const detected = $("#shv-bulk-detected");
+    detected.innerHTML = "";
+    const files = Array.from(fileList);
+    if (!files.length) return;
+
+    const matchedKeys = new Set();
+    const chips = [];
+
+    for (const f of files) {
+      try {
+        const buf = await readFileAsArrayBuffer(f);
+        const key = classifyShavuotFile(Detector.detect(buf));
+        if (!key) {
+          chips.push({ kind: "error", text: `❌ ${f.name} — לא זוהה` });
+          continue;
+        }
+        if (matchedKeys.has(key)) {
+          chips.push({ kind: "warn", text: `⚠️ ${f.name} — שני קבצים זוהו כ"${SHV_LABEL[key]}"` });
+          continue;
+        }
+        assignFileToSlot(key, f, buf);
+        matchedKeys.add(key);
+        chips.push({ kind: "ok", text: `✓ ${SHV_LABEL[key]}: ${f.name}` });
+      } catch (err) {
+        console.error(err);
+        chips.push({ kind: "error", text: `❌ ${f.name} — ${err.message}` });
+      }
+    }
+
+    detected.innerHTML = chips
+      .map((c) => `<span class="detected-chip ${c.kind === "ok" ? "" : c.kind}">${c.text}</span>`)
+      .join("");
+
+    const missing = SHAVUOT_KEYS.filter((k) => !state.shavuotFiles[k]);
+    if (missing.length) {
+      detected.innerHTML +=
+        `<span class="detected-chip warn">חסרים: ${missing.map((k) => SHV_LABEL[k]).join(", ")}</span>`;
+    }
+
+    state.rows = null;
+    updateButtons();
+  }
+
+  function setupShavuotBulkUpload() {
+    const input = $("#shv-bulk-input");
+    const zone = $("#shv-bulk-zone");
+    if (!input || !zone) return;
+    input.addEventListener("change", (e) => {
+      handleShavuotBulkFiles(e.target.files);
+      e.target.value = "";
+    });
+    ["dragenter", "dragover"].forEach((ev) => {
+      zone.addEventListener(ev, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        zone.classList.add("dragover");
+      });
+    });
+    ["dragleave", "drop"].forEach((ev) => {
+      zone.addEventListener(ev, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        zone.classList.remove("dragover");
+      });
+    });
+    zone.addEventListener("drop", (e) => {
+      const fl = e.dataTransfer && e.dataTransfer.files;
+      if (fl && fl.length) handleShavuotBulkFiles(fl);
+    });
+  }
+
   // ===== Holiday tabs =====
   function setupHolidayTabs() {
     document.querySelectorAll(".holiday-tab").forEach((btn) => {
@@ -749,6 +850,7 @@
     SHAVUOT_KEYS.forEach(setupFileInput);
     setupBulkUpload();
     setupShiftReportsUpload();
+    setupShavuotBulkUpload();
     setupHolidayTabs();
     $("#calculate-btn").addEventListener("click", calculate);
     $("#download-btn").addEventListener("click", downloadXlsx);

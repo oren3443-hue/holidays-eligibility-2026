@@ -77,15 +77,17 @@ const Detector = (function () {
             mo1 = m[2].padStart(2, "0"),
             d2 = m[4].padStart(2, "0"),
             mo2 = m[5].padStart(2, "0");
+          // Structured numeric range so callers can place a report before/after a holiday.
+          const dates = { startDay: +d1, startMonth: +mo1, endDay: +d2, endMonth: +mo2 };
           const startEqEnd = d1 === d2 && mo1 === mo2;
           if (startEqEnd) {
-            if (d1 === "31" && mo1 === "03") return { type: "march31", date: `${d1}/${mo1}` };
-            if (d1 === "09" && mo1 === "04") return { type: "april9", date: `${d1}/${mo1}` };
-            return { type: "daily_unknown_single", date: `${d1}/${mo1}` };
+            if (d1 === "31" && mo1 === "03") return { type: "march31", date: `${d1}/${mo1}`, ...dates };
+            if (d1 === "09" && mo1 === "04") return { type: "april9", date: `${d1}/${mo1}`, ...dates };
+            return { type: "daily_unknown_single", date: `${d1}/${mo1}`, ...dates };
           }
           // multi-day range
-          if (mo1 === "04" || mo2 === "04") return { type: "april", range: `${d1}/${mo1}-${d2}/${mo2}` };
-          return { type: "daily_unknown_range", range: `${d1}/${mo1}-${d2}/${mo2}` };
+          if (mo1 === "04" || mo2 === "04") return { type: "april", range: `${d1}/${mo1}-${d2}/${mo2}`, ...dates };
+          return { type: "daily_unknown_range", range: `${d1}/${mo1}-${d2}/${mo2}`, ...dates };
         }
         return { type: "daily_unknown" };
       }

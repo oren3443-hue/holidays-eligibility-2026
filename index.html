@@ -6,7 +6,7 @@
   <title>חישוב זכאויות לחגים 2026</title>
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="apple-touch-icon" href="favicon.svg">
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/style.css?v=20260531">
   <!-- xlsx-js-style: drop-in fork of SheetJS that supports cell styles for output -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 </head>
@@ -50,8 +50,7 @@
     <section class="info-box" data-mode="shavuot" hidden>
       <h2>איך זה עובד?</h2>
       <ol>
-        <li>העלה את <strong>פרטי עובדים</strong> ו<strong>נוכחות 3 חודשים</strong> (כמו בחגים האחרים).</li>
-        <li>העלה <strong>דוח שכר רשתי — לפני החג</strong> ו<strong>דוח שכר רשתי — אחרי החג</strong> (טווחי התאריכים נבחרים בעת הפקת הדוח).</li>
+        <li>גרור את כל <strong>4 הקבצים יחד</strong> לאזור ההעלאה — הם יזוהו אוטומטית לפי תוכנם: <strong>פרטי עובדים</strong>, <strong>נוכחות 3 חודשים</strong>, ו<strong>דוח שכר רשתי לפני/אחרי החג</strong> (ההבחנה לפי טווח התאריכים בדוח).</li>
         <li>לחץ "חשב זכאות". עובד <strong>במתכונת 6 ימים</strong> שנכח (עבד/חופש/מחלה/מילואים) <strong>גם לפני וגם אחרי</strong> החג, ובעל <strong>ותק של 3 חודשים</strong> (עד 22.2.2026), יקבל <em>תשלום חג</em> — ממוצע שעות יומי משולם (3 חודשים), עד תקרת 7 שעות (שבועות חל ביום שישי).</li>
       </ol>
       <p class="note">
@@ -141,6 +140,16 @@
     </section>
 
     <!-- Shavuot upload section -->
+    <section class="bulk-upload" data-mode="shavuot" hidden>
+      <label for="shv-bulk-input" class="bulk-zone" id="shv-bulk-zone">
+        <div class="bulk-icon">📥</div>
+        <div class="bulk-title">גרור לכאן את כל 4 הקבצים יחד</div>
+        <div class="bulk-sub">או לחץ לבחירה — הקבצים יזוהו אוטומטית לפי תוכנם (לפני/אחרי לפי טווח התאריכים בדוח)</div>
+      </label>
+      <input type="file" id="shv-bulk-input" accept=".xlsx,.xls" multiple hidden>
+      <div class="bulk-detected" id="shv-bulk-detected"></div>
+    </section>
+
     <section class="upload-grid" data-mode="shavuot" hidden>
       <div class="upload-card" data-key="shv_employees">
         <div class="upload-title">1. פרטי עובדים</div>
@@ -324,12 +333,14 @@
     <small>חישוב זכאויות לחגים · רץ בצד הלקוח · ללא שרת</small>
   </footer>
 
-  <script src="js/parser.js"></script>
-  <script src="js/detector.js"></script>
-  <script src="js/eligibility.js"></script>
-  <script src="js/independence.js"></script>
-  <script src="js/shavuot.js"></script>
-  <script src="js/exporter.js"></script>
-  <script src="js/main.js"></script>
+  <!-- ?v bumps on every JS change so browsers don't run a stale cached copy.
+       The document revalidates on reload, so a new ?v forces a fresh fetch of the scripts. -->
+  <script src="js/parser.js?v=20260531"></script>
+  <script src="js/detector.js?v=20260531"></script>
+  <script src="js/eligibility.js?v=20260531"></script>
+  <script src="js/independence.js?v=20260531"></script>
+  <script src="js/shavuot.js?v=20260531"></script>
+  <script src="js/exporter.js?v=20260531"></script>
+  <script src="js/main.js?v=20260531"></script>
 </body>
 </html>
