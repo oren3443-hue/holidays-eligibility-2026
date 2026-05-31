@@ -5,7 +5,7 @@
 (function () {
   // ===== State =====
   const state = {
-    holiday: "pesach", // "pesach" | "independence"
+    holiday: "pesach", // "pesach" | "independence" | "shavuot"
 
     // Pesach slot files
     files: {
@@ -24,6 +24,14 @@
     // Independence multi-upload: array of { name, buffer }
     shiftReports: [],
 
+    // Shavuot slot files
+    shavuotFiles: {
+      shv_employees: null,
+      shv_three_months: null,
+      shv_before: null,
+      shv_after: null,
+    },
+
     rows: null, // calculated results (shape depends on mode)
 
     filters: {
@@ -34,13 +42,21 @@
       independence: {
         mode: "", tenure: "", dpw: "", search: "",
       },
+      shavuot: {
+        eligible: "", search: "",
+      },
     },
   };
 
   const PESACH_KEYS = ["employees", "three_months", "april", "march31", "april9"];
   const IND_KEYS = ["ind_employees", "ind_three_months"];
+  const SHAVUOT_KEYS = ["shv_employees", "shv_three_months", "shv_before", "shv_after"];
   const PESACH_SUBTITLE = "פסח א · חול המועד · פסח ב — חישוב אוטומטי לכל עובד";
   const IND_SUBTITLE = "יום העצמאות — שעות חג בפועל ותשלום חג לכל עובד";
+  const SHV_SUBTITLE = "שבועות — תשלום חג לעובדי 6 ימים שנכחו לפני ואחרי החג";
+  const SUBTITLES = { pesach: PESACH_SUBTITLE, independence: IND_SUBTITLE, shavuot: SHV_SUBTITLE };
+  // Default payroll-import pay period (month) per holiday.
+  const IMPORT_MONTH = { pesach: 4, independence: 4, shavuot: 5 };
 
   function $(sel) { return document.querySelector(sel); }
   function $$(sel) { return Array.from(document.querySelectorAll(sel)); }
@@ -53,7 +69,12 @@
 
   // ===== Mode helpers =====
   function isPesach() { return state.holiday === "pesach"; }
-  function activeColumns() { return isPesach() ? Exporter.COLUMNS : Exporter.COLUMNS_INDEPENDENCE; }
+  function isShavuot() { return state.holiday === "shavuot"; }
+  function activeColumns() {
+    if (isPesach()) return Exporter.COLUMNS;
+    if (isShavuot()) return Exporter.COLUMNS_SHAVUOT;
+    return Exporter.COLUMNS_INDEPENDENCE;
+  }
 
   function applyHolidayMode() {
     document.querySelectorAll("[data-mode]").forEach((el) => {
@@ -65,7 +86,10 @@
       btn.classList.toggle("active", active);
       btn.setAttribute("aria-selected", active ? "true" : "false");
     });
-    $("#subtitle").textContent = isPesach() ? PESACH_SUBTITLE : IND_SUBTITLE;
+    $("#subtitle").textContent = SUBTITLES[state.holiday] || PESACH_SUBTITLE;
+    // Keep the import pay-period month in sync with the active holiday.
+    const monthInput = $("#cfg-month");
+    if (monthInput) monthInput.value = IMPORT_MONTH[state.holiday] || 4;
   }
 
   function setHoliday(holiday) {
@@ -82,6 +106,8 @@
     let allLoaded;
     if (isPesach()) {
       allLoaded = PESACH_KEYS.every((k) => !!state.files[k]);
+    } else if (isShavuot()) {
+      allLoaded = SHAVUOT_KEYS.every((k) => !!state.shavuotFiles[k]);
     } else {
       allLoaded = IND_KEYS.every((k) => !!state.indFiles[k]) && state.shiftReports.length > 0;
     }
@@ -103,6 +129,7 @@
   function getSlotStore(key) {
     if (PESACH_KEYS.includes(key)) return state.files;
     if (IND_KEYS.includes(key)) return state.indFiles;
+    if (SHAVUOT_KEYS.includes(key)) return state.shavuotFiles;
     return null;
   }
 
@@ -334,6 +361,8 @@
     try {
       if (isPesach()) {
         calculatePesach();
+      } else if (isShavuot()) {
+        calculateShavuot();
       } else {
         calculateIndependence();
       }
@@ -416,6 +445,28 @@
     }
   }
 
+  function calculateShavuot() {
+    const empSheet = Parser.readSheet(state.shavuotFiles.shv_employees.buffer);
+    const employees = Parser.parseEmployees(empSheet);
+
+    const window = ShavuotEligibility.THREE_MONTH_WINDOW;
+    const tmRows = Parser.pickMonthsSheet(state.shavuotFiles.shv_three_months.buffer, window);
+    const threeMonths = Parser.parseThreeMonthsPaid(tmRows, window);
+
+    const beforeSheet = Parser.readSheet(state.shavuotFiles.shv_before.buffer, "Sheet1");
+    const before = Parser.parseNetworkPayReport(beforeSheet, "דוח לפני החג");
+
+    const afterSheet = Parser.readSheet(state.shavuotFiles.shv_after.buffer, "Sheet1");
+    const after = Parser.parseNetworkPayReport(afterSheet, "דוח אחרי החג");
+
+    const rows = ShavuotEligibility.calculateAll({ employees, threeMonths, before, after });
+
+    state.rows = rows;
+    renderResults();
+    const eligibleCount = rows.filter((r) => r.eligible).length;
+    setMessage(`חושבו ${rows.length} עובדים, מתוכם ${eligibleCount} זכאים.`, "success");
+  }
+
   // ===== Rendering =====
   function fmtCell(val, col) {
     if (val === null || val === undefined || val === "") return "—";
@@ -439,7 +490,22 @@
 
   function applyFilters(rows) {
     if (isPesach()) return applyPesachFilters(rows);
+    if (isShavuot()) return applyShavuotFilters(rows);
     return applyIndependenceFilters(rows);
+  }
+
+  function applyShavuotFilters(rows) {
+    const f = state.filters.shavuot;
+    const search = (f.search || "").trim().toLowerCase();
+    return rows.filter((r) => {
+      if (f.eligible === "yes" && !r.eligible) return false;
+      if (f.eligible === "no"  &&  r.eligible) return false;
+      if (search) {
+        const hay = `${r.empId} ${r.firstName || ""} ${r.lastName || ""} ${r.deptName || ""}`.toLowerCase();
+        if (!hay.includes(search)) return false;
+      }
+      return true;
+    });
   }
 
   function applyPesachFilters(rows) {
@@ -510,6 +576,19 @@
         <div class="summary-card"><strong>${Math.round(totalHours * 100) / 100}</strong>סה"כ שעות חופש</div>
       `;
       $("#filter-count").innerHTML =
+        filteredRows.length === allRows.length
+          ? `מוצגים <strong>${allRows.length}</strong> עובדים`
+          : `מוצגים <strong>${filteredRows.length}</strong> מתוך <strong>${allRows.length}</strong>`;
+    } else if (isShavuot()) {
+      const eligible = allRows.filter((r) => r.eligible).length;
+      const sumPay = allRows.reduce((s, r) => s + (r.holidayPayHours || 0), 0);
+      $("#summary").innerHTML = `
+        <div class="summary-card"><strong>${allRows.length}</strong>סה"כ עובדים</div>
+        <div class="summary-card"><strong>${eligible}</strong>זכאים לתשלום חג</div>
+        <div class="summary-card"><strong>${allRows.length - eligible}</strong>לא זכאים</div>
+        <div class="summary-card"><strong>${Math.round(sumPay * 100) / 100}</strong>סה"כ שעות תשלום</div>
+      `;
+      $("#filter-count-shv").innerHTML =
         filteredRows.length === allRows.length
           ? `מוצגים <strong>${allRows.length}</strong> עובדים`
           : `מוצגים <strong>${filteredRows.length}</strong> מתוך <strong>${allRows.length}</strong>`;
@@ -593,6 +672,34 @@
         renderResults();
       });
     }
+
+    // Shavuot filters
+    document.querySelectorAll('#filters-shv select[data-filter]').forEach((sel) => {
+      sel.addEventListener("change", (e) => {
+        state.filters.shavuot[e.target.dataset.filter] = e.target.value;
+        renderResults();
+      });
+    });
+    let ssearchTimer = null;
+    const ssearch = $("#filter-search-shv");
+    if (ssearch) {
+      ssearch.addEventListener("input", (e) => {
+        clearTimeout(ssearchTimer);
+        ssearchTimer = setTimeout(() => {
+          state.filters.shavuot.search = e.target.value;
+          renderResults();
+        }, 150);
+      });
+    }
+    const sresetBtn = $("#reset-filters-shv");
+    if (sresetBtn) {
+      sresetBtn.addEventListener("click", () => {
+        Object.keys(state.filters.shavuot).forEach((k) => (state.filters.shavuot[k] = ""));
+        document.querySelectorAll('#filters-shv select').forEach((s) => (s.value = ""));
+        if (ssearch) ssearch.value = "";
+        renderResults();
+      });
+    }
   }
 
   // ===== Downloads =====
@@ -601,6 +708,8 @@
     const rows = applyFilters(state.rows);
     if (isPesach()) {
       Exporter.exportXlsx(rows);
+    } else if (isShavuot()) {
+      Exporter.exportXlsxShavuot(rows);
     } else {
       Exporter.exportXlsxIndependence(rows);
     }
@@ -612,7 +721,7 @@
     const meta = {
       companyNumber: parseInt($("#cfg-company").value, 10) || 10,
       year: parseInt($("#cfg-year").value, 10) || 2026,
-      month: parseInt($("#cfg-month").value, 10) || 4,
+      month: parseInt($("#cfg-month").value, 10) || IMPORT_MONTH[state.holiday] || 4,
     };
     if (isPesach()) {
       const onlyWithData = filtered.filter((r) => {
@@ -620,6 +729,11 @@
                (r.holidayDaysCount > 0) || (r.holidayPayHours > 0);
       });
       Exporter.exportImportXlsx(onlyWithData, undefined, meta);
+    } else if (isShavuot()) {
+      const onlyWithData = filtered.filter((r) => {
+        return (r.holidayDaysCount > 0) || (r.holidayPayHours > 0);
+      });
+      Exporter.exportImportXlsxShavuot(onlyWithData, undefined, meta);
     } else {
       const onlyWithData = filtered.filter((r) => {
         return (r.holidayPayHours > 0) || (r.extraHolidayHours > 0) || (r.holidayDaysCount > 0);
@@ -632,6 +746,7 @@
   document.addEventListener("DOMContentLoaded", () => {
     PESACH_KEYS.forEach(setupFileInput);
     IND_KEYS.forEach(setupFileInput);
+    SHAVUOT_KEYS.forEach(setupFileInput);
     setupBulkUpload();
     setupShiftReportsUpload();
     setupHolidayTabs();

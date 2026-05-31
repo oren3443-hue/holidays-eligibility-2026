@@ -93,6 +93,41 @@ const Exporter = (function () {
     { key: "extraHolidayHours", header: "תוספת שעות חג 100 אחוז", type: "number", numFmt: "0.00", width: 22, blankIfZero: true },
   ];
 
+  // ===== Shavuot =====
+  const COLUMNS_SHAVUOT = [
+    { key: "empId", header: "מספר עובד", type: "number", width: 11 },
+    { key: "firstName", header: "שם פרטי", type: "string", width: 14 },
+    { key: "lastName", header: "שם משפחה", type: "string", width: 14 },
+    { key: "deptName", header: "מחלקה", type: "string", width: 16 },
+    { key: "deptNumber", header: "מס' מחלקה (מיכפל)", type: "number", width: 14 },
+    { key: "daysPerWeek", header: "מתכונת (5/6)", type: "number", width: 11 },
+    { key: "basisCode", header: "בסיס שכר", type: "string", width: 9 },
+    { key: "startDate", header: "תאריך תחילת עבודה", type: "date", width: 16 },
+    { key: "tenureOk", header: "ותק תקין?", fmt: "yesno", width: 10 },
+    { key: "statusBefore", header: "סטטוס לפני", type: "string", width: 12 },
+    { key: "workBefore", header: "ימי עבודה לפני", type: "number", numFmt: "0.##", width: 13 },
+    { key: "statusAfter", header: "סטטוס אחרי", type: "string", width: 12 },
+    { key: "workAfter", header: "ימי עבודה אחרי", type: "number", numFmt: "0.##", width: 13 },
+    { key: "eligible", header: "זכאי?", fmt: "yesno", width: 9 },
+    { key: "reason", header: "סיבה", type: "string", width: 24 },
+    { key: "totalPaidWorkHours", header: 'ש"ע משולמות (3ח\')', type: "number", numFmt: "0.00", width: 15 },
+    { key: "totalPaidWorkDays", header: 'י"ע משולמים (3ח\')', type: "number", numFmt: "0.##", width: 15 },
+    { key: "avgHoursPerDay", header: "ממוצע שעות יומי", type: "number", numFmt: "0.00", width: 14 },
+    { key: "holidayDaysCount", header: "ימי חג", type: "number", width: 9 },
+    { key: "holidayPayHours", header: "חג: שבועות", type: "number", numFmt: "0.00", width: 13 },
+  ];
+
+  // Minimal import file for Shavuot (5 columns). Pay column titled "חג: שבועות".
+  //   row 1: [companyNumber, year, month, null, null]
+  //   row 2: 5 headers; row 3+: data, zeros written as truly empty cells.
+  const IMPORT_COLUMNS_SHAVUOT = [
+    { key: "empId", header: "מספר עובד", type: "number", width: 11, blankIfZero: false },
+    { key: "fullName", header: "שם העובד", type: "string", width: 22, blankIfZero: false },
+    { key: "deptNumber", header: "מחלקה (מיכפל)", type: "number", width: 14, blankIfZero: false },
+    { key: "holidayDaysCount", header: "ימי חג", type: "number", width: 9, blankIfZero: true },
+    { key: "holidayPayHours", header: "חג: שבועות", type: "number", numFmt: "0.00", width: 14, blankIfZero: true },
+  ];
+
   // Style palette
   const COLOR = {
     headerBg: "4F46E5",   // indigo-600
@@ -325,6 +360,30 @@ const Exporter = (function () {
     XLSX.writeFile(wb, fname);
   }
 
+  /** Shavuot: full report. */
+  function exportXlsxShavuot(rows, filename) {
+    const ws = buildSheet(rows, COLUMNS_SHAVUOT, { styled: true });
+    const wb = buildWorkbook(ws, "זכאות שבועות");
+    const fname = filename || `זכאות-שבועות-${todayStr()}.xlsx`;
+    XLSX.writeFile(wb, fname, { cellStyles: true });
+  }
+
+  /** Shavuot: payroll import file (מיכפל) — minimal 5 columns. */
+  function exportImportXlsxShavuot(rows, filename, meta) {
+    const m = meta || { companyNumber: 10, year: 2026, month: 5 };
+    const metaRow = [m.companyNumber, m.year, m.month, null, null];
+    const ws = buildSheet(rows, IMPORT_COLUMNS_SHAVUOT, {
+      styled: false,
+      metaRow,
+      autofilter: false,
+      freeze: false,
+      rtl: true,
+    });
+    const wb = buildWorkbook(ws, "גיליון1");
+    const fname = filename || `קליטה-שבועות-${m.year}-${String(m.month).padStart(2,"0")}.xlsx`;
+    XLSX.writeFile(wb, fname);
+  }
+
   function todayStr() {
     const d = new Date();
     const dd = String(d.getDate()).padStart(2, "0");
@@ -338,9 +397,13 @@ const Exporter = (function () {
     exportImportXlsx,
     exportXlsxIndependence,
     exportImportXlsxIndependence,
+    exportXlsxShavuot,
+    exportImportXlsxShavuot,
     COLUMNS,
     IMPORT_COLUMNS,
     COLUMNS_INDEPENDENCE,
     IMPORT_COLUMNS_INDEPENDENCE,
+    COLUMNS_SHAVUOT,
+    IMPORT_COLUMNS_SHAVUOT,
   };
 })();

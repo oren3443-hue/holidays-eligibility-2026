@@ -20,6 +20,7 @@
     <nav class="holiday-tabs" id="holiday-tabs" role="tablist" aria-label="בחירת חג">
       <button type="button" class="holiday-tab active" data-holiday="pesach" role="tab" aria-selected="true">פסח</button>
       <button type="button" class="holiday-tab" data-holiday="independence" role="tab" aria-selected="false">יום העצמאות</button>
+      <button type="button" class="holiday-tab" data-holiday="shavuot" role="tab" aria-selected="false">שבועות</button>
     </nav>
 
     <section class="info-box" data-mode="pesach">
@@ -40,6 +41,18 @@
         <li>העלה את <strong>פרטי עובדים</strong> ו<strong>נוכחות 3 חודשים</strong> (כמו בפסח).</li>
         <li>גרור את כל <strong>דוחות שעות הסניפים</strong> (20.4–23.4) לאזור הייעודי — הקבצים יזוהו אוטומטית.</li>
         <li>לחץ "חשב זכאות". עובדים שעבדו בחלון 21.4 20:00 → 22.4 20:00 יקבלו רכיב <em>תוספת שעות חג 100%</em>; אחרים שעבדו 21.4 או 23.4 ויש להם ותק יקבלו <em>תשלום חג</em> (ממוצע 3 חודשים).</li>
+      </ol>
+      <p class="note">
+        <strong>פרטיות:</strong> כל החישוב מתבצע בדפדפן שלך. שום קובץ לא נשלח לשרת.
+      </p>
+    </section>
+
+    <section class="info-box" data-mode="shavuot" hidden>
+      <h2>איך זה עובד?</h2>
+      <ol>
+        <li>העלה את <strong>פרטי עובדים</strong> ו<strong>נוכחות 3 חודשים</strong> (כמו בחגים האחרים).</li>
+        <li>העלה <strong>דוח שכר רשתי — לפני החג</strong> ו<strong>דוח שכר רשתי — אחרי החג</strong> (טווחי התאריכים נבחרים בעת הפקת הדוח).</li>
+        <li>לחץ "חשב זכאות". עובד <strong>במתכונת 6 ימים</strong> שנכח (עבד/חופש/מחלה/מילואים) <strong>גם לפני וגם אחרי</strong> החג, ובעל <strong>ותק של 3 חודשים</strong> (עד 22.2.2026), יקבל <em>תשלום חג</em> — ממוצע שעות יומי משולם (3 חודשים), עד תקרת 7 שעות (שבועות חל ביום שישי).</li>
       </ol>
       <p class="note">
         <strong>פרטיות:</strong> כל החישוב מתבצע בדפדפן שלך. שום קובץ לא נשלח לשרת.
@@ -125,6 +138,41 @@
       </label>
       <input type="file" id="shift-reports-input" accept=".xlsx,.xls" multiple hidden>
       <div class="bulk-detected" id="shift-reports-detected"></div>
+    </section>
+
+    <!-- Shavuot upload section -->
+    <section class="upload-grid" data-mode="shavuot" hidden>
+      <div class="upload-card" data-key="shv_employees">
+        <div class="upload-title">1. פרטי עובדים</div>
+        <div class="upload-desc">אותו קובץ ממיכפל — מתכונת (5/6) ותאריך תחילת עבודה</div>
+        <input type="file" id="file-shv_employees" accept=".xlsx,.xls">
+        <label for="file-shv_employees" class="upload-button">בחר קובץ</label>
+        <div class="upload-status" id="status-shv_employees">לא נבחר קובץ</div>
+      </div>
+
+      <div class="upload-card" data-key="shv_three_months">
+        <div class="upload-title">2. נוכחות 3 חודשים</div>
+        <div class="upload-desc">חודשים 2–4 (לפני שבועות) לחישוב ממוצע שעות יומי משולם</div>
+        <input type="file" id="file-shv_three_months" accept=".xlsx,.xls">
+        <label for="file-shv_three_months" class="upload-button">בחר קובץ</label>
+        <div class="upload-status" id="status-shv_three_months">לא נבחר קובץ</div>
+      </div>
+
+      <div class="upload-card" data-key="shv_before">
+        <div class="upload-title">3. דוח שכר רשתי — לפני החג</div>
+        <div class="upload-desc">נוכחות בטווח שלפני שבועות (נבחר בעת הפקת הדוח)</div>
+        <input type="file" id="file-shv_before" accept=".xlsx,.xls">
+        <label for="file-shv_before" class="upload-button">בחר קובץ</label>
+        <div class="upload-status" id="status-shv_before">לא נבחר קובץ</div>
+      </div>
+
+      <div class="upload-card" data-key="shv_after">
+        <div class="upload-title">4. דוח שכר רשתי — אחרי החג</div>
+        <div class="upload-desc">נוכחות בטווח שאחרי שבועות (נבחר בעת הפקת הדוח)</div>
+        <input type="file" id="file-shv_after" accept=".xlsx,.xls">
+        <label for="file-shv_after" class="upload-button">בחר קובץ</label>
+        <div class="upload-status" id="status-shv_after">לא נבחר קובץ</div>
+      </div>
     </section>
 
     <section class="actions">
@@ -246,6 +294,23 @@
         <div class="filter-count" id="filter-count-ind"></div>
       </div>
 
+      <div class="filters" id="filters-shv" data-mode="shavuot" hidden>
+        <div class="filter-item">
+          <label>זכאות</label>
+          <select data-filter="eligible">
+            <option value="">הכל</option>
+            <option value="yes">רק זכאים</option>
+            <option value="no">רק לא זכאים</option>
+          </select>
+        </div>
+        <div class="filter-item filter-search">
+          <label>חיפוש</label>
+          <input type="text" id="filter-search-shv" placeholder="שם / מספר עובד / מחלקה">
+        </div>
+        <button id="reset-filters-shv" type="button">איפוס</button>
+        <div class="filter-count" id="filter-count-shv"></div>
+      </div>
+
       <div class="table-wrapper">
         <table id="results-table">
           <thead></thead>
@@ -263,6 +328,7 @@
   <script src="js/detector.js"></script>
   <script src="js/eligibility.js"></script>
   <script src="js/independence.js"></script>
+  <script src="js/shavuot.js"></script>
   <script src="js/exporter.js"></script>
   <script src="js/main.js"></script>
 </body>

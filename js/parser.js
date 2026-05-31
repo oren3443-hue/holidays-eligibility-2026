@@ -82,6 +82,7 @@ const Parser = (function () {
         endDate: toDate(r[65]),
         daysPerWeek: r[75] === 5 ? 5 : r[75] === 6 ? 6 : (toNumber(r[75]) === 5 ? 5 : toNumber(r[75]) === 6 ? 6 : null),
         deptNumber: r[71] !== null && r[71] !== undefined && r[71] !== "" ? r[71] : null, // col 72: מספר מחלקה
+        basisCode: typeof r[79] === "string" ? r[79].trim() : (r[79] != null ? String(r[79]).trim() : null), // col 80: משרה - קוד בסיס שכר (ש=שעתי, ח=חודשי/גלובלי)
       });
     }
     return out;
@@ -332,6 +333,151 @@ const Parser = (function () {
     return out;
   }
 
+  // ===== Network payroll report (דוח שכר רשתי) — "before"/"after" files for Shavuot =====
+  // Same column NAMES but positions can shift between exports (these files are shifted
+  // LEFT by 1 vs the daily-attendance files), so we map by header, not fixed index.
+  // CRITICAL: the join key is the payroll-system number ("מס' עובד במע' שכר"), NOT the
+  // branch "מספר עובד" — the latter is a different number space (0% overlap with the
+  // master file). So "מספר עובד" is intentionally absent from the empId aliases.
+  const NETPAY_HEADER_ALIASES = {
+    empId:     ["מס' עובד במע' שכר", "מס עובד במע' שכר"],
+    work:      ["ימי עבודה בפועל"],
+    vacation:  ["ימי חופש"],
+    sick:      ["ימי מחלה"],
+    military:  ["ימי מילואים"],
+    firstName: ["שם פרטי"],
+    lastName:  ["שם משפחה"],
+    deptName:  ["מחלקה"],
+  };
+  const NETPAY_REQUIRED = ["empId", "work"];
+
+  function findNetPayHeaderRow(rows) {
+    let best = -1, bestScore = 0;
+    const keywords = Object.values(NETPAY_HEADER_ALIASES).flat();
+    for (let i = 0; i < Math.min(rows.length, 10); i++) {
+      const r = rows[i];
+      if (!r) continue;
+      const flat = r.map((c) => (c == null ? "" : String(c).trim()));
+      let score = 0;
+      for (const kw of keywords) {
+        if (flat.some((v) => v === kw)) score++;
+      }
+      if (score > bestScore) { bestScore = score; best = i; }
+    }
+    return bestScore >= 3 ? best : -1;
+  }
+
+  function mapNetPayColumns(headerRow) {
+    const result = {};
+    const flat = headerRow.map((c) => (c == null ? "" : String(c).trim()));
+    for (const [field, aliases] of Object.entries(NETPAY_HEADER_ALIASES)) {
+      for (const alias of aliases) {
+        let idx = flat.findIndex((v) => v === alias);
+        if (idx < 0) idx = flat.findIndex((v) => v.includes(alias));
+        if (idx >= 0) { result[field] = idx; break; }
+      }
+    }
+    return result;
+  }
+
+  /** Parse a "before"/"after" network payroll report (דוח שכר רשתי).
+   *  Returns Map<empId, {empId, firstName, lastName, deptName, work, vacation, sick, military}>.
+   *  empId = "מס' עובד במע' שכר" (matches master file's מספר עובד directly).
+   *  @throws Error with file label on a malformed file (no recognizable header). */
+  function parseNetworkPayReport(rows, fileLabel) {
+    const label = fileLabel || "דוח שכר רשתי";
+    const headerIdx = findNetPayHeaderRow(rows);
+    if (headerIdx < 0) {
+      throw new Error(`קובץ "${label}": לא נמצאה שורת כותרת מזוהה (מצופה: מס' עובד במע' שכר, ימי עבודה בפועל, ימי חופש/מחלה/מילואים).`);
+    }
+    const colMap = mapNetPayColumns(rows[headerIdx]);
+    const missing = NETPAY_REQUIRED.filter((f) => colMap[f] === undefined);
+    if (missing.length) {
+      const labelMap = { empId: "מס' עובד במע' שכר", work: "ימי עבודה בפועל" };
+      throw new Error(`קובץ "${label}": חסרה עמודה "${labelMap[missing[0]]}".`);
+    }
+    const out = new Map();
+    for (let i = headerIdx + 1; i < rows.length; i++) {
+      const r = rows[i];
+      if (!r) continue;
+      const empId = r[colMap.empId];
+      if (empId === null || empId === undefined || empId === "" || empId === 0) continue;
+      out.set(empId, {
+        empId,
+        firstName: colMap.firstName !== undefined ? (r[colMap.firstName] || "") : "",
+        lastName:  colMap.lastName  !== undefined ? (r[colMap.lastName]  || "") : "",
+        deptName:  colMap.deptName  !== undefined ? (r[colMap.deptName]  || "") : "",
+        work:      colMap.work      !== undefined ? toNumber(r[colMap.work])     : 0,
+        vacation:  colMap.vacation  !== undefined ? toNumber(r[colMap.vacation]) : 0,
+        sick:      colMap.sick      !== undefined ? toNumber(r[colMap.sick])     : 0,
+        military:  colMap.military  !== undefined ? toNumber(r[colMap.military]) : 0,
+      });
+    }
+    return out;
+  }
+
+  // ===== 3-month attendance: paid columns (for Shavuot) =====
+
+  /** From a multi-sheet 3-month workbook, return the rows of the data sheet whose
+   *  month set best covers targetMonths (contains all of them, with the fewest extra
+   *  months). This file can hold several windows on different sheets — e.g. {1,2,3},
+   *  {2,3,4}, full-year — so we pick by content, not by sheet name. Falls back to the
+   *  first sheet if none qualifies. */
+  function pickMonthsSheet(buffer, targetMonths) {
+    const wb = XLSX.read(buffer, { type: "array", cellDates: true });
+    const target = new Set(targetMonths);
+    let best = null;
+    for (const name of wb.SheetNames) {
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, raw: true, defval: null });
+      if (!rows.length) continue;
+      const months = new Set();
+      let hasEmpCol = false;
+      for (let i = 1; i < rows.length; i++) {
+        const r = rows[i];
+        if (!r || r.length < 19) continue;
+        if (r[2] !== null && r[2] !== undefined && r[2] !== "") hasEmpCol = true;
+        const m = toNumber(r[5]);
+        if (m >= 1 && m <= 12) months.add(m);
+      }
+      if (!hasEmpCol || months.size === 0) continue;
+      let containsAll = true;
+      for (const t of target) if (!months.has(t)) { containsAll = false; break; }
+      if (!containsAll) continue;
+      const extra = months.size - target.size;
+      if (best === null || extra < best.extra) best = { rows, extra };
+    }
+    if (best) return best.rows;
+    const first = wb.Sheets[wb.SheetNames[0]];
+    return XLSX.utils.sheet_to_json(first, { header: 1, raw: true, defval: null });
+  }
+
+  /** Parse 3-month attendance using the PAID columns, filtered to targetMonths.
+   *  Returns Map<empId, {empId, paidWorkDays, paidWorkHours}>.
+   *  Unlike parseThreeMonths (which sums every row), this filters by month so a
+   *  full-year sheet still yields only the wanted window. */
+  function parseThreeMonthsPaid(rows, targetMonths) {
+    const target = targetMonths ? new Set(targetMonths) : null;
+    const map = new Map();
+    for (let i = 1; i < rows.length; i++) {
+      const r = rows[i];
+      if (!r) continue;
+      const empId = r[2]; // col 3: מספר עובד
+      if (empId === null || empId === undefined || empId === "") continue;
+      const month = toNumber(r[5]); // col 6: מספר חודש
+      if (target && !target.has(month)) continue;
+      const paidWorkDays    = toNumber(r[9]);  // col 10: י"ע משולמים
+      const paidWorkHours   = toNumber(r[10]); // col 11: ש"ע משולמות
+      let entry = map.get(empId);
+      if (!entry) {
+        entry = { empId, paidWorkDays: 0, paidWorkHours: 0 };
+        map.set(empId, entry);
+      }
+      entry.paidWorkDays    += paidWorkDays;
+      entry.paidWorkHours   += paidWorkHours;
+    }
+    return map;
+  }
+
   /** Merge multiple per-file shift maps into one combined map. */
   function combineShiftReports(perFileMaps) {
     const combined = new Map();
@@ -370,6 +516,9 @@ const Parser = (function () {
     parseThreeMonths,
     parseShiftReport,
     combineShiftReports,
+    parseNetworkPayReport,
+    pickMonthsSheet,
+    parseThreeMonthsPaid,
     toDate,
     toNumber,
   };
